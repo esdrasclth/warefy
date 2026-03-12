@@ -43,16 +43,17 @@ export default function LoginPage() {
           src="/login-bg.png"
           alt="Warehouse Abstract Concept"
           fill
+          unoptimized
           className="object-cover opacity-80 mix-blend-screen"
           priority
         />
         <div className="absolute inset-0 bg-gradient-to-r from-primary-dark/80 to-transparent" />
         
         <div className="absolute bottom-16 left-16 z-10 max-w-lg">
-          <h2 className="text-4xl font-light text-white tracking-tight leading-tight">
-            Gestión Inteligente de Almacenes.
+          <h2 className="text-4xl md:text-5xl font-bold tracking-widest uppercase text-white leading-tight">
+            Gestión Inteligente de <span className="text-accent">Almacenes.</span>
           </h2>
-          <p className="mt-4 text-gray-400 font-medium tracking-wide">
+          <p className="mt-4 text-white font-medium tracking-wide text-lg">
             Control preciso, análisis dinámico y trazabilidad absoluta en cada requisa.
           </p>
         </div>

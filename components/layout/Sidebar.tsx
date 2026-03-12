@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, ClipboardList, Wallet, Users, X } from 'lucide-react';
+import { LayoutDashboard, Package, ClipboardList, Wallet, Users, X, Settings } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -17,6 +17,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     { name: 'Requisar', href: '/requisar', icon: ClipboardList },
     { name: 'Presupuestos', href: '/presupuestos', icon: Wallet },
     { name: 'Empleados', href: '/empleados', icon: Users },
+    { name: 'Configuración', href: '/configuracion', icon: Settings },
   ];
 
   return (

@@ -36,28 +36,37 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
   const [newCatName, setNewCatName] = useState('');
   const [newUnitName, setNewUnitName] = useState('');
 
+  // Currency Conversion State
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
+  const [useHnlConverter, setUseHnlConverter] = useState(false);
+  const [rawHnlValue, setRawHnlValue] = useState<number | ''>('');
+
   // Form State
   const [formData, setFormData] = useState<ProductData>({
     code: '', name: '', category_id: '', unit_id: '',
     quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE'
   });
 
-  // Fetch Categories and Units
+  // Fetch Categories, Units and Global Settings
   const fetchMetadata = async () => {
     setIsLoadingMetadata(true);
-    const [catsRes, unitsRes] = await Promise.all([
+    const [catsRes, unitsRes, settingsRes] = await Promise.all([
       supabase.from('categories').select('*').order('name'),
-      supabase.from('units').select('*').order('name')
+      supabase.from('units').select('*').order('name'),
+      supabase.from('global_settings').select('*').eq('id', 1).single()
     ]);
     
     if (catsRes.data) setCategories(catsRes.data);
     if (unitsRes.data) setUnits(unitsRes.data);
+    if (settingsRes.data) setExchangeRate(settingsRes.data.exchange_rate_usd_hnl);
     setIsLoadingMetadata(false);
   };
 
   useEffect(() => {
     if (isOpen) {
       fetchMetadata();
+      setUseHnlConverter(false);
+      setRawHnlValue('');
     }
   }, [isOpen]);
 
@@ -77,9 +86,20 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleHnlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value === '' ? '' : Number(e.target.value);
+    setRawHnlValue(val);
+    if (val !== '' && exchangeRate) {
+      // Auto compute the USD equivalent into the main form data payload
+      setFormData(prev => ({ ...prev, price: Number((val / exchangeRate).toFixed(4)) }));
+    } else {
+      setFormData(prev => ({ ...prev, price: 0 }));
+    }
+  };
+
   const handleAddCategory = async () => {
     if (!newCatName.trim()) return;
-    const { data, error } = await supabase.from('categories').insert({ name: newCatName.trim() }).select().single();
+    const { data, error } = await supabase.from('categories').insert({ name: newCatName.trim().toUpperCase() }).select().single();
     if (error) {
       alert('Error creando categoría: ' + error.message);
     } else if (data) {
@@ -102,7 +122,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
 
   const handleAddUnit = async () => {
     if (!newUnitName.trim()) return;
-    const { data, error } = await supabase.from('units').insert({ name: newUnitName.trim() }).select().single();
+    const { data, error } = await supabase.from('units').insert({ name: newUnitName.trim().toUpperCase() }).select().single();
     if (error) {
       alert('Error creando unidad: ' + error.message);
     } else if (data) {
@@ -280,20 +300,60 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-primary">Precio Unitario ($)</label>
-                    <input 
-                      value={formData.price} onChange={e => handleChange('price', Number(e.target.value))}
-                      type="number" step="0.01" className="w-full border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors" 
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-primary">Precio Unitario ($)</label>
+                      <label className="flex items-center gap-1.5 cursor-pointer group">
+                        <input 
+                          type="checkbox" 
+                          checked={useHnlConverter}
+                          disabled={!exchangeRate}
+                          onChange={(e) => setUseHnlConverter(e.target.checked)}
+                          className="accent-primary w-3 h-3 cursor-pointer"
+                        />
+                        <span className="text-[10px] text-gray-500 font-medium tracking-wide uppercase group-hover:text-primary transition-colors">
+                          En Lempiras (HNL)
+                        </span>
+                      </label>
+                    </div>
+                    
+                    {useHnlConverter ? (
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 text-xs">
+                          L.
+                        </div>
+                        <input 
+                          value={rawHnlValue || ''} 
+                          onChange={handleHnlChange}
+                          type="number" step="0.01" 
+                          className="w-full pl-8 pr-3 py-2 border border-accent bg-accent/5 text-sm focus:outline-none focus:border-primary transition-colors" 
+                          placeholder="0.00"
+                        />
+                        <div className="absolute -bottom-5 right-0 text-[9px] text-accent font-bold tracking-widest uppercase">
+                          = USD ${(Number(rawHnlValue) / (exchangeRate || 1)).toFixed(4)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 text-xs">
+                          $
+                        </div>
+                        <input 
+                          value={formData.price || ''} 
+                          onChange={e => handleChange('price', Number(e.target.value))}
+                          type="number" step="0.01" 
+                          className="w-full pl-7 pr-3 py-2 border border-gray-200 bg-white text-sm focus:outline-none focus:border-primary transition-colors" 
+                        />
+                      </div>
+                    )}
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1 mt-2">
                     <label className="text-xs font-semibold text-primary">Stock Mínimo</label>
                     <input 
                       value={formData.min_stock} onChange={e => handleChange('min_stock', Number(e.target.value))}
                       type="number" className="w-full border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors" 
                     />
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1 mt-2">
                     <label className="text-xs font-semibold text-primary">Stock Máximo</label>
                     <input 
                       value={formData.max_stock} onChange={e => handleChange('max_stock', Number(e.target.value))}

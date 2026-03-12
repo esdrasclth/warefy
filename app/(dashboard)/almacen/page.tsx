@@ -80,7 +80,7 @@ export default function AlmacenPage() {
           <h1 className="text-3xl font-light text-primary tracking-tight">Inventario</h1>
           <p className="text-gray-500 mt-2 text-sm">Catálogo de artículos y control de existencias.</p>
         </div>
-        <button 
+        <button
           onClick={handleNewClick}
           className="flex items-center gap-2 bg-primary text-background px-5 py-3 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"
         >
@@ -105,10 +105,10 @@ export default function AlmacenPage() {
       <div className="bg-white border border-gray-100 shadow-sm overflow-x-auto relative min-h-[400px]">
         {isLoading ? (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-sm z-20">
-             <Loader2 size={32} className="animate-spin text-primary" />
+            <Loader2 size={32} className="animate-spin text-primary" />
           </div>
         ) : null}
-        
+
         <table className="w-full text-left whitespace-nowrap">
           <thead>
             <tr className="bg-gray-50/80 border-b border-gray-100 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
@@ -135,17 +135,17 @@ export default function AlmacenPage() {
                 const available = stock - committed;
                 const min = item.min_stock || 0;
                 const price = item.price || 0;
-                
+
                 const totalCost = stock * price;
                 const isLowStock = available <= min;
-                
+
                 return (
                   <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
                     <td className="px-5 py-4 text-sm font-bold text-primary">{item.code}</td>
                     <td className="px-5 py-4 text-sm text-gray-700 font-medium group-hover:text-primary transition-colors">{item.name}</td>
-                    <td className="px-5 py-4 text-sm text-gray-500">{item.categories?.name || 'N/A'}</td>
-                    <td className="px-5 py-4 text-sm text-gray-500 lowercase">{item.units?.name || 'N/A'}</td>
-                    
+                    <td className="px-5 py-4 text-sm text-gray-500 uppercase">{item.categories?.name || 'N/A'}</td>
+                    <td className="px-5 py-4 text-sm text-gray-500 uppercase">{item.units?.name || 'N/A'}</td>
+
                     <td className="px-5 py-4 text-sm text-right font-bold text-gray-500">
                       {stock}
                     </td>
@@ -161,30 +161,29 @@ export default function AlmacenPage() {
                     <td className="px-5 py-4 text-sm text-right text-gray-400">{item.max_stock}</td>
                     <td className="px-5 py-4 text-sm text-right text-gray-600 font-mono">{price.toFixed(2)}</td>
                     <td className="px-5 py-4 text-sm text-right font-bold text-primary font-mono">{totalCost.toFixed(2)}</td>
-                    
+
                     <td className="px-5 py-4 text-center">
-                      <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 border ${
-                        item.status === 'ACTIVE' ? 'text-green-600 border-green-200 bg-green-50' : 'text-gray-400 border-gray-200 bg-gray-50'
-                      }`}>
+                      <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 border ${item.status === 'ACTIVE' ? 'text-green-600 border-green-200 bg-green-50' : 'text-gray-400 border-gray-200 bg-gray-50'
+                        }`}>
                         {item.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
-                    
+
                     <td className="px-5 py-4 text-center sticky right-0 bg-white group-hover:bg-gray-50/50 transition-colors border-l border-gray-100">
                       <div className="flex items-center justify-center gap-3">
-                        <button 
+                        <button
                           onClick={() => setHistoryProduct(item)}
                           className="text-gray-400 hover:text-blue-500 transition-colors" title="Ver Historial"
                         >
                           <Eye size={16} strokeWidth={2} />
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleEditClick(item)}
                           className="text-gray-400 hover:text-primary transition-colors" title="Editar"
                         >
                           <Edit2 size={16} strokeWidth={2} />
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleDelete(item.id)}
                           className="text-gray-400 hover:text-red-500 transition-colors" title="Eliminar"
                         >
@@ -206,10 +205,10 @@ export default function AlmacenPage() {
         </table>
       </div>
 
-      <ProductFormModal 
-        isOpen={isModalOpen} 
-        productToEdit={productToEdit} 
-        onClose={() => setIsModalOpen(false)} 
+      <ProductFormModal
+        isOpen={isModalOpen}
+        productToEdit={productToEdit}
+        onClose={() => setIsModalOpen(false)}
         onSaveSuccess={fetchItems}
       />
       <ProductHistoryModal product={historyProduct} onClose={() => setHistoryProduct(null)} />

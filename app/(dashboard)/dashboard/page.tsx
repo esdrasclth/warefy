@@ -1,14 +1,15 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Package, Wallet, ClipboardList, Activity, Loader2, ArrowRight } from 'lucide-react';
+import { Package, Wallet, ClipboardList, Activity, Loader2, ArrowRight, DollarSign } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts';
 
 export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [metrics, setMetrics] = useState({
     totalProducts: 0,
+    totalInventoryValue: 0,
     totalBudget: 0,
     totalRequisitionsMTD: 0,
     monthlyCost: 0
@@ -21,6 +22,7 @@ export default function DashboardPage() {
   const [timelineChartData, setTimelineChartData] = useState<any[]>([]);
   const [productChartData, setProductChartData] = useState<any[]>([]);
   const [budgetChartData, setBudgetChartData] = useState<any[]>([]);
+  const [categoryChartData, setCategoryChartData] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -59,24 +61,31 @@ export default function DashboardPage() {
         .order('created_at', { ascending: false })
         .limit(5);
 
-      // 6. Stock Alerts
-      const { data: items } = await supabase
+      // 6. Stock Alerts & Inventory Valuation
+      const { data: items, error: itemsError } = await supabase
         .from('inventory_items')
-        .select('id, name, code, quantity, committed_quantity, minimum_stock')
+        .select('id, name, code, quantity, committed_quantity, min_stock, price')
         .eq('status', 'ACTIVE');
         
+      if (itemsError) console.error('Items query error:', itemsError);
+
+      const totalInventoryValue = items?.reduce((acc, item) => {
+        return acc + ((item.quantity || 0) * (item.price || 0));
+      }, 0) || 0;
+
       const alerts = items?.filter(item => {
-        const available = item.quantity - (item.committed_quantity || 0);
-        const threshold = item.minimum_stock || 0;
+        const available = (item.quantity || 0) - (item.committed_quantity || 0);
+        const threshold = item.min_stock || 0;
         return available <= threshold;
       }).sort((a, b) => {
-        const availableA = a.quantity - (a.committed_quantity || 0);
-        const availableB = b.quantity - (b.committed_quantity || 0);
+        const availableA = (a.quantity || 0) - (a.committed_quantity || 0);
+        const availableB = (b.quantity || 0) - (b.committed_quantity || 0);
         return availableA - availableB;
       }).slice(0, 10) || []; // Show top 10 most critical
 
       setMetrics({
         totalProducts: prodCount || 0,
+        totalInventoryValue,
         totalBudget,
         totalRequisitionsMTD: reqCount || 0,
         monthlyCost
@@ -98,7 +107,7 @@ export default function DashboardPage() {
           area_name, 
           created_at,
           total_cost,
-          requisition_items ( inventory_item_id, quantity, unit_cost, inventory_items(name, code) )
+          requisition_items ( inventory_item_id, quantity, unit_cost, inventory_items(name, code, categories(name)) )
         `)
         .neq('status', 'CANCELADA')
         .gte('created_at', oneYearAgoStr);
@@ -109,6 +118,9 @@ export default function DashboardPage() {
         
         // Build Product Data (12 Months)
         const prodMap: Record<string, { code: string, name: string, cost: number }> = {};
+        
+        // Build Category Data (12 Months)
+        const catMap: Record<string, number> = {};
 
         // Prepare the last 12 months as initial zeroed keys to ensure a continuous line graph
         for (let i = 11; i >= 0; i--) {
@@ -126,15 +138,22 @@ export default function DashboardPage() {
              timelineMap[monthKey] += (Number(req.total_cost) || 0);
           }
 
-          // Product Map
+          // Product Map & Category Map
           req.requisition_items?.forEach((item: any) => {
             const pid = item.inventory_item_id;
             const pname = item.inventory_items?.name || 'Item Desconocido';
             const pcode = item.inventory_items?.code || 'N/A';
             const cost = (item.quantity || 0) * (item.unit_cost || 0);
             
+            // Collect Product Stats
             if (!prodMap[pid]) prodMap[pid] = { code: pcode, name: pname, cost: 0 };
             prodMap[pid].cost += cost;
+            
+            // Collect Category Stats
+            const categoryData = item.inventory_items?.categories as any; // Handles object un-nesting
+            const categoryName = categoryData?.name || 'Sin Categoría';
+            if (!catMap[categoryName]) catMap[categoryName] = 0;
+            catMap[categoryName] += cost;
           });
         });
 
@@ -150,6 +169,12 @@ export default function DashboardPage() {
           .sort((a, b) => b.cost - a.cost)
           .slice(0, 15);
         setProductChartData(prodDataRaw);
+
+        // Format Category Data for PieChart
+        const catDataRaw = Object.entries(catMap)
+          .map(([name, value]) => ({ name, value }))
+          .sort((a, b) => b.value - a.value);
+        setCategoryChartData(catDataRaw);
       }
 
       // Chart 3: Budget vs Consumed (MTD) per Area
@@ -225,6 +250,7 @@ export default function DashboardPage() {
 
   const stats = [
     { label: 'Total Productos', value: metrics.totalProducts.toLocaleString(), icon: Package, color: 'text-primary' },
+    { label: 'Valor en Inventario', value: `$${metrics.totalInventoryValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: DollarSign, color: 'text-primary' },
     { label: 'Presupuesto Total', value: `$${metrics.totalBudget.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: Wallet, color: 'text-primary' },
     { label: 'Requisas (Mes)', value: metrics.totalRequisitionsMTD.toString(), icon: ClipboardList, color: 'text-primary' },
     { label: 'Gasto del Mes', value: `$${metrics.monthlyCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: Activity, color: 'text-primary' },
@@ -243,7 +269,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             {stats.map((stat, idx) => {
               const Icon = stat.icon;
               return (
@@ -378,30 +404,44 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Chart 2: Consumption Timeline (12 Months) */}
+            {/* Chart 2: Consumption by Category (PieChart) */}
             <div className="bg-white border border-gray-100 p-8 shadow-sm">
               <div className="flex items-center justify-between mb-6 border-b border-gray-100 pb-4">
-                <h2 className="text-sm font-bold text-primary uppercase tracking-widest">Consumo por Mes (Últimos 12 Meses)</h2>
+                <h2 className="text-sm font-bold text-primary uppercase tracking-widest">Consumo Total por Categoría (12 Meses)</h2>
               </div>
               <div className="h-[350px] w-full">
-                {timelineChartData.length > 0 ? (
+                {categoryChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={timelineChartData}
-                      margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="mes" stroke="#9ca3af" fontSize={11} tick={{ fill: '#4b5563' }} />
-                      <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
+                    <PieChart margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                      <Pie
+                        data={categoryChartData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={120}
+                        paddingAngle={2}
+                      >
+                        {categoryChartData.map((entry, index) => {
+                          const COLORS = ['#001d3d', '#ffc300', '#003566', '#ffd60a', '#00509d', '#ffea00', '#1e293b'];
+                          return <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />;
+                        })}
+                      </Pie>
                       <Tooltip 
-                        formatter={(value: any) => [`$${Number(value).toLocaleString(undefined, {minimumFractionDigits: 2})}`, 'Total USD']}
+                        formatter={(value: any) => [`$${Number(value).toLocaleString(undefined, {minimumFractionDigits: 2})}`, 'Total Consumido']}
                         contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb' }}
                       />
-                      <Line type="monotone" dataKey="consumo" name="Consumo Mensual Global" stroke="#001d3d" strokeWidth={3} dot={{ r: 4, fill: '#ffc300', strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                    </LineChart>
+                      <Legend 
+                        layout="vertical" 
+                        verticalAlign="middle" 
+                        align="right"
+                        wrapperStyle={{ fontSize: '12px', paddingLeft: '20px' }}
+                      />
+                    </PieChart>
                   </ResponsiveContainer>
                 ) : (
-                   <div className="flex items-center justify-center h-full text-gray-400 text-sm">No hay datos históricos suficientes.</div>
+                   <div className="flex items-center justify-center h-full text-gray-400 text-sm">No hay datos históricos por categoría.</div>
                 )}
               </div>
             </div>
@@ -433,6 +473,34 @@ export default function DashboardPage() {
                   </ResponsiveContainer>
                 ) : (
                    <div className="flex items-center justify-center h-full text-gray-400 text-sm">No hay áreas con presupuesto o consumo activo.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Chart 4: Consumption Timeline (12 Months) */}
+            <div className="bg-white border border-gray-100 p-8 shadow-sm col-span-1 lg:col-span-2">
+              <div className="flex items-center justify-between mb-6 border-b border-gray-100 pb-4">
+                <h2 className="text-sm font-bold text-primary uppercase tracking-widest">Consumo por Mes (Últimos 12 Meses)</h2>
+              </div>
+              <div className="h-[350px] w-full">
+                {timelineChartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={timelineChartData}
+                      margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                      <XAxis dataKey="mes" stroke="#9ca3af" fontSize={11} tick={{ fill: '#4b5563' }} />
+                      <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
+                      <Tooltip 
+                        formatter={(value: any) => [`$${Number(value).toLocaleString(undefined, {minimumFractionDigits: 2})}`, 'Total USD']}
+                        contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb' }}
+                      />
+                      <Line type="monotone" dataKey="consumo" name="Consumo Mensual Global" stroke="#001d3d" strokeWidth={3} dot={{ r: 4, fill: '#ffc300', strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                   <div className="flex items-center justify-center h-full text-gray-400 text-sm">No hay datos históricos suficientes.</div>
                 )}
               </div>
             </div>
