@@ -1,9 +1,16 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { FileText, Plus, Search, Printer, Trash2, Eye, Loader2, Check, X } from 'lucide-react';
+import { FileText, Plus, Search, Printer, Trash2, Eye, Loader2, Check, X, TrendingUp, ClipboardList, Wallet, Activity, Calendar, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import type { Requisition, RequisitionItem, RequisitionStatus, UserProfile } from '@/types';
+
+interface AreaMetrics {
+  consumoMes: number;
+  requisasMes: number;
+  presupuestoAsignado: number | null;
+  presupuestoDisponible: number | null;
+}
 
 export default function RequisarPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -12,6 +19,74 @@ export default function RequisarPage() {
   const [requisitions, setRequisitions] = useState<Requisition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [areaMetrics, setAreaMetrics] = useState<AreaMetrics | null>(null);
+
+  const today = new Date();
+  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+    .toISOString().split('T')[0];
+  const todayStr = today.toISOString().split('T')[0];
+
+  const [dateFrom, setDateFrom] = useState(firstOfMonth);
+  const [dateTo, setDateTo] = useState(todayStr);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const fetchAreaMetrics = async (profile: UserProfile) => {
+    const startOfMonth = new Date(
+      new Date().getFullYear(), new Date().getMonth(), 1
+    ).toISOString();
+
+    const isAdmin = profile.role === 'ADMIN';
+    const areaId = profile.employees?.area_id;
+
+    let consumoQuery = supabase
+      .from('requisitions')
+      .select('total_cost')
+      .neq('status', 'CANCELADA')
+      .gte('created_at', startOfMonth);
+    if (!isAdmin && areaId) consumoQuery = consumoQuery.eq('area_id', areaId);
+    const { data: consumoData } = await consumoQuery;
+    const consumoMes = consumoData?.reduce(
+      (acc, r) => acc + (Number(r.total_cost) || 0), 0
+    ) || 0;
+
+    let countQuery = supabase
+      .from('requisitions')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', startOfMonth);
+    if (!isAdmin && areaId) countQuery = countQuery.eq('area_id', areaId);
+    const { count: requisasMes } = await countQuery;
+
+    let presupuestoAsignado: number | null = null;
+    if (!isAdmin && areaId) {
+      const { data: budgetData } = await supabase
+        .from('area_budgets')
+        .select('monthly_budget')
+        .eq('area_id', areaId)
+        .single();
+      if (budgetData?.monthly_budget > 0) {
+        presupuestoAsignado = Number(budgetData.monthly_budget);
+      }
+    } else if (isAdmin) {
+      const { data: allBudgets } = await supabase
+        .from('area_budgets')
+        .select('monthly_budget');
+      const total = allBudgets?.reduce(
+        (acc, b) => acc + (Number(b.monthly_budget) || 0), 0
+      ) || 0;
+      presupuestoAsignado = total > 0 ? total : null;
+    }
+
+    const presupuestoDisponible = presupuestoAsignado !== null
+      ? presupuestoAsignado - consumoMes
+      : null;
+
+    setAreaMetrics({
+      consumoMes,
+      requisasMes: requisasMes || 0,
+      presupuestoAsignado,
+      presupuestoDisponible,
+    });
+  };
 
   const fetchProfileAndRequisitions = async () => {
     setIsLoading(true);
@@ -27,6 +102,9 @@ export default function RequisarPage() {
       .single();
     
     setUserProfile(profile);
+    if (profile) {
+      await fetchAreaMetrics(profile);
+    }
 
     // 2. Obtener requisas con filtro opcional
     let query = supabase
@@ -109,22 +187,231 @@ export default function RequisarPage() {
     return true;
   });
 
+  const handleExportExcel = async () => {
+    if (!dateFrom || !dateTo) return alert('Selecciona un rango de fechas válido.');
+    setIsExporting(true);
+
+    try {
+      const isAdmin = userProfile?.role === 'ADMIN';
+      const areaId = userProfile?.employees?.area_id;
+
+      let query = supabase
+        .from('requisition_items')
+        .select(`
+          id,
+          quantity,
+          delivered_quantity,
+          unit_cost,
+          created_at,
+          inventory_items (
+            code,
+            name,
+            categories ( name )
+          ),
+          requisitions (
+            id,
+            consecutive,
+            comments,
+            created_at,
+            requester_code,
+            requester_name,
+            area_name,
+            area_id,
+            status
+          )
+        `)
+        .gte('created_at', `${dateFrom}T00:00:00Z`)
+        .lte('created_at', `${dateTo}T23:59:59Z`)
+        .order('created_at', { ascending: false });
+
+      const { data, error } = await query;
+      if (error) { alert('Error al exportar: ' + error.message); return; }
+
+      const exportRows = (data || [])
+        .filter((item: any) => {
+          const req = item.requisitions as any;
+          if (!req || req.status === 'CANCELADA') return false;
+          if (!isAdmin && areaId && req.area_id !== areaId) return false;
+          return true;
+        })
+        .map((item: any) => {
+          const req = item.requisitions as any;
+          const inv = item.inventory_items as any;
+          const cat = inv?.categories as any;
+          const precioUnit = Number(item.unit_cost) || 0;
+          const cantEntregada = Number(item.delivered_quantity ?? item.quantity) || 0;
+          return {
+            'Fecha': req?.created_at
+              ? new Date(req.created_at).toLocaleDateString('es-HN') : '—',
+            'Número de Requisa': req?.consecutive
+              ? `REQ-${String(req.consecutive).padStart(6, '0')}` : '—',
+            'Estado': req?.status || '—',
+            'Área': req?.area_name || '—',
+            'Código Producto': inv?.code || '—',
+            'Descripción Producto': inv?.name || '—',
+            'Categoría': cat?.name || 'Sin Categoría',
+            'Cantidad Solicitada': Number(item.quantity) || 0,
+            'Cantidad Entregada': cantEntregada,
+            'Código Solicitante': req?.requester_code || '—',
+            'Nombre Solicitante': req?.requester_name || '—',
+            'Precio Unitario (USD)': precioUnit,
+            'Total (USD)': cantEntregada * precioUnit,
+            'Comentarios': req?.comments || '—',
+          };
+        });
+
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      ws['!cols'] = [
+        { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 22 }, { wch: 16 },
+        { wch: 40 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
+        { wch: 28 }, { wch: 20 }, { wch: 16 }, { wch: 40 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Requisas');
+      XLSX.writeFile(wb, `requisas_${dateFrom}_${dateTo}.xlsx`);
+
+    } catch (e: any) {
+      alert('Error inesperado: ' + e.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h1 className="text-3xl font-light text-primary tracking-tight">Requisas</h1>
           <p className="text-gray-500 mt-2 text-sm">Creación y seguimiento de solicitudes de material.</p>
         </div>
-        <Link 
-          href="/requisar/nueva"
-          className="flex items-center gap-2 bg-primary text-background px-5 py-3 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"
-        >
-          <Plus size={18} strokeWidth={2.5} />
-          Nueva Requisa
-        </Link>
+        <div className="flex flex-col sm:flex-row items-end gap-3">
+          <div className="flex items-center gap-2 bg-white border border-gray-200 px-3 h-10 shadow-sm">
+            <Calendar size={14} className="text-gray-400 shrink-0" />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="text-sm text-primary bg-transparent focus:outline-none h-full"
+            />
+            <span className="text-gray-300 text-sm">—</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="text-sm text-primary bg-transparent focus:outline-none h-full"
+            />
+          </div>
+          <button
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-4 h-10 text-sm font-bold tracking-wide transition-colors shadow-sm disabled:opacity-60"
+          >
+            {isExporting
+              ? <Loader2 size={16} className="animate-spin" />
+              : <FileSpreadsheet size={16} />
+            }
+            {isExporting ? 'Exportando…' : 'Descargar Excel'}
+          </button>
+          <Link 
+            href="/requisar/nueva"
+            className="flex items-center gap-2 bg-primary text-background px-5 h-10 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"
+          >
+            <Plus size={18} strokeWidth={2.5} />
+            Nueva Requisa
+          </Link>
+        </div>
       </div>
+
+      {/* Métricas del Área */}
+      {!isLoading && areaMetrics && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="bg-white border border-gray-100 border-l-4 border-l-sky-500 p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                  Consumo del Mes
+                </p>
+                <p className="text-xl font-light text-primary tracking-tight truncate">
+                  ${areaMetrics.consumoMes.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-[9px] text-gray-400 mt-1 truncate">
+                  {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu área')}
+                </p>
+              </div>
+              <div className="p-2 ml-3 shrink-0 bg-sky-500 text-white">
+                <TrendingUp size={16} strokeWidth={2} />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-100 border-l-4 border-l-blue-500 p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                  Requisas del Mes
+                </p>
+                <p className="text-xl font-light text-primary tracking-tight truncate">
+                  {areaMetrics.requisasMes.toLocaleString()}
+                </p>
+                <p className="text-[9px] text-gray-400 mt-1 truncate">
+                  {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu área')}
+                </p>
+              </div>
+              <div className="p-2 ml-3 shrink-0 bg-blue-500 text-white">
+                <ClipboardList size={16} strokeWidth={2} />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-100 border-l-4 border-l-primary p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                  Presupuesto Asignado
+                </p>
+                {areaMetrics.presupuestoAsignado === null ? (
+                  <p className="text-gray-400 text-sm italic">Sin límite</p>
+                ) : (
+                  <p className="text-xl font-light text-primary tracking-tight truncate">
+                    ${areaMetrics.presupuestoAsignado.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </p>
+                )}
+                <p className="text-[9px] text-gray-400 mt-1 truncate">
+                  {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu área')}
+                </p>
+              </div>
+              <div className="p-2 ml-3 shrink-0 bg-primary text-white">
+                <Wallet size={16} strokeWidth={2} />
+              </div>
+            </div>
+          </div>
+
+          <div className={`bg-white border border-gray-100 border-l-4 p-4 shadow-sm ${areaMetrics.presupuestoDisponible !== null && areaMetrics.presupuestoDisponible < 0 ? 'border-l-red-500' : 'border-l-green-500'}`}>
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                  Presupuesto Disponible
+                </p>
+                {areaMetrics.presupuestoDisponible === null ? (
+                  <p className="text-gray-400 text-sm italic">Sin límite</p>
+                ) : (
+                  <p className={`text-xl font-light tracking-tight truncate ${areaMetrics.presupuestoDisponible < 0 ? 'text-red-600' : 'text-primary'}`}>
+                    ${areaMetrics.presupuestoDisponible.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </p>
+                )}
+                <p className="text-[9px] text-gray-400 mt-1 truncate">
+                  {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu área')}
+                </p>
+              </div>
+              <div className={`p-2 ml-3 shrink-0 text-white ${areaMetrics.presupuestoDisponible !== null && areaMetrics.presupuestoDisponible < 0 ? 'bg-red-500' : 'bg-green-500'}`}>
+                <Activity size={16} strokeWidth={2} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="space-y-4">
