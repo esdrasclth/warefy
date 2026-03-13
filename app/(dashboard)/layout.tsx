@@ -5,10 +5,11 @@ import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/utils/supabase/client';
 import { Loader2 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
+import type { UserProfile } from '@/types';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isChecking, setIsChecking] = useState(true);
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 

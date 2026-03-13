@@ -2,18 +2,19 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, MapPin, Users, Loader2, Save, X, BookOpen, Edit2, Trash2, Key, Shield, Mail, Lock } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
+import type { Area, Employee } from '@/types';
 
 export default function EmpleadosPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [areas, setAreas] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
 
   // User Access States
-  const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
   const [isCreatingAccess, setIsCreatingAccess] = useState(false);
   const [accessForm, setAccessForm] = useState({ email: '', password: '', role: 'USER' });
@@ -22,7 +23,7 @@ export default function EmpleadosPage() {
   // Form states
   const [newArea, setNewArea] = useState({ name: '', description: '' });
   const [newEmployee, setNewEmployee] = useState({ code: '', first_name: '', last_name: '', position: '', area_id: '' });
-  const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchData = async () => {
@@ -123,7 +124,7 @@ export default function EmpleadosPage() {
     }
   };
 
-  const openEditModal = (emp: any) => {
+  const openEditModal = (emp: Employee) => {
     setEditingEmployee(emp);
     setNewEmployee({
       code: emp.code || '',

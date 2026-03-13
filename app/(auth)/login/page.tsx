@@ -56,12 +56,12 @@ export default function LoginPage() {
       {/* Left Axis: Abstract Premium Image */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-primary-dark">
         <Image
-          src="/login-bg.jpg"
+          src="/login-bg.webp"
           alt="Warehouse Abstract Concept"
           fill
-          unoptimized
           className="object-cover opacity-80 mix-blend-screen animate-in fade-in duration-1000"
           priority
+          quality={75}
         />
         <div className="absolute inset-0 bg-gradient-to-r from-primary-dark/80 to-transparent" />
 

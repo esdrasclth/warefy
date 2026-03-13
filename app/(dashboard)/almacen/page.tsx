@@ -4,14 +4,15 @@ import { Search, Plus, Edit2, Trash2, Eye, Loader2 } from 'lucide-react';
 import ProductFormModal, { ProductData } from '@/components/almacen/ProductFormModal';
 import ProductHistoryModal from '@/components/almacen/ProductHistoryModal';
 import { supabase } from '@/utils/supabase/client';
+import type { InventoryItem } from '@/types';
 
 export default function AlmacenPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [historyProduct, setHistoryProduct] = useState<any | null>(null);
+  const [historyProduct, setHistoryProduct] = useState<InventoryItem | null>(null);
   const [productToEdit, setProductToEdit] = useState<ProductData | null>(null);
 
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchItems = async () => {
@@ -63,9 +64,10 @@ export default function AlmacenPage() {
       }));
 
       setItems(enrichedItems || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching inventory:', error);
-      alert('Error cargando datos: ' + error.message);
+      const message = error instanceof Error ? error.message : 'Error inesperado.';
+      alert('Error cargando datos: ' + message);
     }
     setIsLoading(false);
   };
@@ -82,7 +84,7 @@ export default function AlmacenPage() {
     }
   };
 
-  const handleEditClick = (product: any) => {
+  const handleEditClick = (product: InventoryItem) => {
     setProductToEdit({
       id: product.id,
       code: product.code,

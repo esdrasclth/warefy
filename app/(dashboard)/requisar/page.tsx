@@ -3,16 +3,15 @@ import { useState, useEffect } from 'react';
 import { FileText, Plus, Search, Printer, Trash2, Eye, Loader2, Check, X } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
-
-type RequisitionStatus = 'PENDIENTE' | 'PENDIENTE DE APROBACION' | 'ENTREGADA' | 'CANCELADA';
+import type { Requisition, RequisitionItem, RequisitionStatus, UserProfile } from '@/types';
 
 export default function RequisarPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODAS' | RequisitionStatus>('TODAS');
   
-  const [requisitions, setRequisitions] = useState<any[]>([]);
+  const [requisitions, setRequisitions] = useState<Requisition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   const fetchProfileAndRequisitions = async () => {
     setIsLoading(true);
@@ -89,7 +88,7 @@ export default function RequisarPage() {
     const areaStr = req.area_name || '';
     
     // items count calculation
-    const totalItems = req.requisition_items?.reduce((acc: number, curr: any) => acc + (curr.quantity || 0), 0) || 0;
+    const totalItems = req.requisition_items?.reduce((acc: number, curr: RequisitionItem) => acc + (curr.quantity || 0), 0) || 0;
 
     // 1. Status Filter
     if (statusFilter !== 'TODAS' && statusStr !== statusFilter) return false;
@@ -187,7 +186,7 @@ export default function RequisarPage() {
             <tbody className="divide-y divide-gray-50">
               {filteredRequisitions.length > 0 ? (
                 filteredRequisitions.map((req) => {
-                  const totalItems = req.requisition_items?.reduce((acc: number, curr: any) => acc + (curr.quantity || 0), 0) || 0;
+                  const totalItems = req.requisition_items?.reduce((acc: number, curr: RequisitionItem) => acc + (curr.quantity || 0), 0) || 0;
                   const dateStr = new Date(req.created_at).toLocaleDateString();
 
                   return (

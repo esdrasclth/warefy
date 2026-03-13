@@ -3,10 +3,11 @@
 import { Menu, UserCircle, LogOut, Shield } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase/client';
+import type { UserProfile } from '@/types';
 
 interface TopbarProps {
   onMenuClick: () => void;
-  userProfile?: any;
+  userProfile?: UserProfile;
 }
 
 export default function Topbar({ onMenuClick, userProfile }: TopbarProps) {

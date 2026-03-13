@@ -4,6 +4,35 @@ import { Package, Wallet, ClipboardList, Activity, Loader2, ArrowRight, DollarSi
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts';
+import type { InventoryItem, Requisition, RequisitionItem } from '@/types';
+
+interface ActivityRequisition extends Pick<Requisition, 'id' | 'created_at' | 'status' | 'area_name'> {}
+
+interface StockAlertItem extends InventoryItem {
+  minimum_stock?: number;
+}
+
+interface BudgetChartRow {
+  name: string;
+  presupuesto: number;
+  consumido: number;
+}
+
+interface TimelineChartRow {
+  mes: string;
+  consumo: number;
+}
+
+interface ProductChartRow {
+  code: string;
+  name: string;
+  cost: number;
+}
+
+interface CategoryChartRow {
+  name: string;
+  value: number;
+}
 
 export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -15,14 +44,14 @@ export default function DashboardPage() {
     monthlyCost: 0
   });
 
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
-  const [stockAlerts, setStockAlerts] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<ActivityRequisition[]>([]);
+  const [stockAlerts, setStockAlerts] = useState<StockAlertItem[]>([]);
 
   // Charts State
-  const [timelineChartData, setTimelineChartData] = useState<any[]>([]);
-  const [productChartData, setProductChartData] = useState<any[]>([]);
-  const [budgetChartData, setBudgetChartData] = useState<any[]>([]);
-  const [categoryChartData, setCategoryChartData] = useState<any[]>([]);
+  const [timelineChartData, setTimelineChartData] = useState<TimelineChartRow[]>([]);
+  const [productChartData, setProductChartData] = useState<ProductChartRow[]>([]);
+  const [budgetChartData, setBudgetChartData] = useState<BudgetChartRow[]>([]);
+  const [categoryChartData, setCategoryChartData] = useState<CategoryChartRow[]>([]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -93,18 +122,18 @@ export default function DashboardPage() {
             timelineMap[d.toLocaleString('es-ES', { month: 'short', year: 'numeric' })] = 0;
           }
 
-          histReqs.forEach((req: any) => {
+          histReqs.forEach((req: Requisition) => {
             const d = new Date(req.created_at);
             const monthKey = d.toLocaleString('es-ES', { month: 'short', year: 'numeric' });
             if (timelineMap[monthKey] !== undefined) timelineMap[monthKey] += (Number(req.total_cost) || 0);
 
-            req.requisition_items?.forEach((item: any) => {
+            req.requisition_items?.forEach((item: RequisitionItem) => {
               const pid = item.inventory_item_id;
               const cost = (item.quantity || 0) * (item.unit_cost || 0);
               if (!prodMap[pid]) prodMap[pid] = { code: item.inventory_items?.code || 'N/A', name: item.inventory_items?.name || 'Item', cost: 0 };
               prodMap[pid].cost += cost;
 
-              const catName = (item.inventory_items?.categories as any)?.name || 'Sin Categoría';
+              const catName = item.inventory_items?.categories?.name || 'Sin Categoría';
               catMap[catName] = (catMap[catName] || 0) + cost;
             });
           });
@@ -114,13 +143,13 @@ export default function DashboardPage() {
           setCategoryChartData(Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value));
         }
 
-        const budgetMap: Record<string, { name: string, presupuesto: number, consumido: number }> = {};
-        areasWithBudgets?.forEach(area => {
-          const bdg = (area.area_budgets as any)?.monthly_budget || 0;
+        const budgetMap: Record<string, BudgetChartRow> = {};
+        areasWithBudgets?.forEach((area: { name: string; area_budgets?: { monthly_budget?: number } | null }) => {
+          const bdg = area.area_budgets?.monthly_budget || 0;
           if (bdg > 0) budgetMap[area.name] = { name: area.name, presupuesto: Number(bdg), consumido: 0 };
         });
 
-        reqsMonth?.forEach((req: any) => {
+        reqsMonth?.forEach((req: Requisition) => {
           if (req.area_name) {
             if (!budgetMap[req.area_name]) budgetMap[req.area_name] = { name: req.area_name, presupuesto: 0, consumido: 0 };
             budgetMap[req.area_name].consumido += Number(req.total_cost || 0);
@@ -344,7 +373,7 @@ export default function DashboardPage() {
                           })}
                         </Pie>
                         <Tooltip
-                          formatter={(value: any) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total Consumido']}
+                          formatter={(value: number) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total Consumido']}
                           contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb' }}
                         />
                         <Legend
@@ -379,7 +408,7 @@ export default function DashboardPage() {
                         <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tick={{ fill: '#4b5563' }} />
                         <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
                         <Tooltip
-                          formatter={(value: any) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, '']}
+                          formatter={(value: number) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, '']}
                           contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb' }}
                           cursor={{ fill: '#f9fafb' }}
                         />
@@ -412,7 +441,7 @@ export default function DashboardPage() {
                         <XAxis dataKey="mes" stroke="#9ca3af" fontSize={11} tick={{ fill: '#4b5563' }} />
                         <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
                         <Tooltip
-                          formatter={(value: any) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total USD']}
+                          formatter={(value: number) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total USD']}
                           contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb' }}
                         />
                         <Line type="monotone" dataKey="consumo" name="Consumo Mensual Global" stroke="#001d3d" strokeWidth={3} dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2 }} activeDot={{ r: 6 }} />

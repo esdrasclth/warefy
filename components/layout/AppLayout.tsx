@@ -2,10 +2,11 @@
 import { useState } from 'react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import type { UserProfile } from '@/types';
 
 interface AppLayoutProps {
   children: React.ReactNode;
-  userProfile?: any;
+  userProfile?: UserProfile;
 }
 
 export default function AppLayout({ children, userProfile }: AppLayoutProps) {

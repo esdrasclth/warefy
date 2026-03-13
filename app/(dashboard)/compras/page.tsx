@@ -4,13 +4,14 @@ import { ShoppingCart, Plus, Search, Trash2, Eye, Loader2, Check, X, FileSpreads
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
+import type { Purchase } from '@/types';
 
 type PurchaseStatus = 'PENDIENTE' | 'RECIBIDA' | 'CANCELADA';
 
 export default function ComprasPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODAS' | PurchaseStatus>('TODAS');
-  const [purchases, setPurchases] = useState<any[]>([]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchPurchases = async () => {
@@ -45,7 +46,7 @@ export default function ComprasPage() {
     }
   };
 
-  const handleReceive = async (purchase: any) => {
+  const handleReceive = async (purchase: Purchase) => {
     if (!confirm('¿Deseas registrar la recepción de esta compra? Esto incrementará el stock en el inventario.')) return;
 
     try {

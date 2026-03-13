@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, Download, ChevronLeft, ChevronRight, Calendar, FileSpreadsheet, Search } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
+import type { InventoryItem, Requisition, RequisitionItem } from '@/types';
 
 const PAGE_SIZE = 50;
 
@@ -21,6 +22,11 @@ interface RegistroRow {
   req_id: string;
   status: string;
   comments: string;
+}
+
+interface RegistroQueryItem extends RequisitionItem {
+  requisitions?: Requisition;
+  inventory_items?: InventoryItem;
 }
 
 export default function RegistrosPage() {
@@ -137,11 +143,11 @@ export default function RegistrosPage() {
       return;
     }
 
-    const mapped = (data || [])
-      .map((item: any): RegistroRow => {
-        const req = item.requisitions as any;
-        const inv = item.inventory_items as any;
-        const cat = inv?.categories as any;
+    const mapped = (data as RegistroQueryItem[] || [])
+      .map((item): RegistroRow => {
+        const req = item.requisitions;
+        const inv = item.inventory_items;
+        const cat = inv?.categories;
         const precioUnit = Number(item.unit_cost) || 0;
         const cantEntregada = Number(item.delivered_quantity ?? item.quantity) || 0;
         return {
