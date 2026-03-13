@@ -118,14 +118,14 @@ export default function ComprasPage() {
         <div className="flex gap-2">
           <button 
             onClick={exportToExcel}
-            className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-4 h-10 text-sm font-bold tracking-wide transition-colors shadow-sm"
+            className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-5 py-3 text-sm font-semibold transition-colors shadow-sm"
           >
             <FileSpreadsheet size={16} />
             Descargar Excel
           </button>
           <Link 
             href="/compras/nueva"
-            className="flex items-center gap-2 bg-primary text-background px-5 h-10 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"
+            className="flex items-center gap-2 bg-primary text-background px-5 py-3 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"
           >
             <Plus size={18} strokeWidth={2.5} />
             Nueva Compra

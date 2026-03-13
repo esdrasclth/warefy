@@ -273,7 +273,7 @@ export default function RegistrosPage() {
 
         {/* Excel Export */}
         <div className="flex flex-col sm:flex-row items-end gap-3">
-          <div className="flex items-center gap-2 bg-white border border-gray-200 px-3 h-10 shadow-sm">
+          <div className="flex items-center gap-2 bg-white border border-gray-200 px-3 py-3 shadow-sm">
             <Calendar size={14} className="text-gray-400 shrink-0" />
             <input
               type="date"
@@ -292,7 +292,7 @@ export default function RegistrosPage() {
           <button
             onClick={handleExportExcel}
             disabled={isExporting}
-            className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-4 h-10 text-sm font-bold tracking-wide transition-colors shadow-sm disabled:opacity-60"
+            className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-5 py-3 text-sm font-semibold transition-colors shadow-sm disabled:opacity-60"
           >
             {isExporting
               ? <Loader2 size={16} className="animate-spin" />
