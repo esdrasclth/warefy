@@ -56,6 +56,9 @@ export default function RequisarPage() {
   }, []);
 
   const handleDelete = async (id: string) => {
+    // SECURITY: RLS policy 'requisitions_delete_admin' garantiza que
+    // solo ADMIN puede eliminar en la BD. Este botón solo se muestra
+    // en el frontend para ADMIN, pero el backend lo refuerza también.
     if (confirm(`¿Estás seguro de eliminar permanentemente la requisa?`)) {
       const { error } = await supabase.from('requisitions').delete().eq('id', id);
       if (error) alert('Error eliminando requisa: ' + error.message);
@@ -188,6 +191,9 @@ export default function RequisarPage() {
                 filteredRequisitions.map((req) => {
                   const totalItems = req.requisition_items?.reduce((acc: number, curr: RequisitionItem) => acc + (curr.quantity || 0), 0) || 0;
                   const dateStr = new Date(req.created_at).toLocaleDateString();
+                  const isAdminOrAlmacen = userProfile?.role === 'ADMIN' || userProfile?.role === 'ALMACEN';
+                  const isUser = userProfile?.role === 'USER';
+                  const isOwnArea = req.area_id === userProfile?.employees?.area_id;
 
                   return (
                     <tr key={req.id} className="hover:bg-blue-50/20 transition-colors group">
@@ -218,24 +224,28 @@ export default function RequisarPage() {
                         <div className="flex items-center justify-center gap-2">
                            {req.status === 'PENDIENTE' && (
                              <>
-                               <button 
-                                onClick={() => updateStatus(req.id, 'ENTREGADA')}
-                                className="p-1 text-gray-400 hover:text-green-600 transition-colors" 
-                                title="Entregar"
-                               >
-                                 <Check size={14} strokeWidth={3} />
-                               </button>
-                               <button 
-                                onClick={() => updateStatus(req.id, 'CANCELADA')}
-                                className="p-1 text-gray-400 hover:text-red-500 transition-colors" 
-                                title="Cancelar"
-                               >
-                                 <X size={14} strokeWidth={3} />
-                               </button>
+                               {isAdminOrAlmacen && (
+                                 <button 
+                                  onClick={() => updateStatus(req.id, 'ENTREGADA')}
+                                  className="p-1 text-gray-400 hover:text-green-600 transition-colors" 
+                                  title="Entregar"
+                                 >
+                                   <Check size={14} strokeWidth={3} />
+                                 </button>
+                               )}
+                               {(isAdminOrAlmacen || (isUser && isOwnArea)) && (
+                                 <button 
+                                  onClick={() => updateStatus(req.id, 'CANCELADA')}
+                                  className="p-1 text-gray-400 hover:text-red-500 transition-colors" 
+                                  title="Cancelar"
+                                 >
+                                   <X size={14} strokeWidth={3} />
+                                 </button>
+                               )}
                              </>
                            )}
                            
-                           {req.status === 'PENDIENTE DE APROBACION' && (
+                           {req.status === 'PENDIENTE DE APROBACION' && isAdminOrAlmacen && (
                              <button 
                                 onClick={() => updateStatus(req.id, 'PENDIENTE')}
                                 className="p-1 text-orange-400 hover:text-orange-600 transition-colors" 
@@ -254,13 +264,15 @@ export default function RequisarPage() {
                            <Link href={`/requisar/${req.id}`} className="p-1 text-gray-400 hover:text-primary transition-colors" title="Detalles">
                              <Eye size={14} />
                            </Link>
-                           <button 
-                            onClick={() => handleDelete(req.id)}
-                            className="p-1 text-gray-400 hover:text-red-500 transition-colors" 
-                            title="Eliminar"
-                           >
-                             <Trash2 size={14} />
-                           </button>
+                           {userProfile?.role === 'ADMIN' && req.status !== 'ENTREGADA' && (
+                             <button 
+                              onClick={() => handleDelete(req.id)}
+                              className="p-1 text-gray-400 hover:text-red-500 transition-colors" 
+                              title="Eliminar"
+                             >
+                               <Trash2 size={14} />
+                             </button>
+                           )}
                         </div>
                       </td>
                     </tr>
