@@ -140,7 +140,9 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
           </Link>
           <div>
             <div className="flex items-center gap-3 print:gap-1">
-              <h1 className="text-3xl print:text-lg font-light text-primary tracking-tight">REQ-{shortenedId}</h1>
+              <h1 className="text-3xl print:text-lg font-light text-primary tracking-tight">
+                REQ-{String(requisition.consecutive || 0).padStart(6, '0')}
+              </h1>
               {getStatusBadge(requisition.status)}
             </div>
             <p className="text-gray-400 font-mono text-xs print:text-[9px] mt-1 print:mt-0">{reqId}</p>
@@ -220,6 +222,16 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
             </div>
         </div>
       </div>
+
+      {/* Comments Section */}
+      {requisition.comments && (
+        <div className="bg-white border border-gray-100 p-6 print:p-2 shadow-sm print:shadow-none text-left">
+          <h3 className="text-[10px] print:text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-3 print:mb-1 border-b border-gray-50 pb-2 print:pb-1">Comentarios y Justificación</h3>
+          <p className="text-sm print:text-[9px] text-gray-700 italic leading-relaxed whitespace-pre-wrap">
+            "{requisition.comments}"
+          </p>
+        </div>
+      )}
 
       {/* Items Table */}
       <div className="bg-white border border-gray-100 shadow-sm print:shadow-none overflow-hidden print:overflow-visible">

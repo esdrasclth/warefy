@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Search, Plus, MapPin, Users, Loader2, Save, X, BookOpen, Edit2, Trash2 } from 'lucide-react';
+import { Search, Plus, MapPin, Users, Loader2, Save, X, BookOpen, Edit2, Trash2, Key, Shield, Mail, Lock } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 
 export default function EmpleadosPage() {
@@ -11,6 +11,13 @@ export default function EmpleadosPage() {
 
   const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
+
+  // User Access States
+  const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
+  const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
+  const [isCreatingAccess, setIsCreatingAccess] = useState(false);
+  const [accessForm, setAccessForm] = useState({ email: '', password: '', role: 'USER' });
+  const [accessMessage, setAccessMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   // Form states
   const [newArea, setNewArea] = useState({ name: '', description: '' });
@@ -60,12 +67,7 @@ export default function EmpleadosPage() {
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
-    // We insert assigning the correct area_id. We map area_name automatically via trigger or manually here if needed.
-    // The previous design used area_name in employees, let's keep it strictly in sync if necessary, or just rely on the join.
-    // For backward compatibility with requisitions, we might still want to populate area_name.
     const selectedArea = areas.find(a => a.id === newEmployee.area_id);
-    
     const payload = {
       ...newEmployee,
       area_name: selectedArea?.name || null 
@@ -203,47 +205,58 @@ export default function EmpleadosPage() {
 
         {/* Employees Table Layout */}
         <div className="bg-white border border-gray-100 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 border-b border-gray-100 p-4 flex items-center gap-2">
-            <Users size={18} className="text-gray-500" />
-            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-widest">Personal Activo ({filteredEmployees.length})</h3>
+          <div className="bg-primary border-b-2 border-white/20 p-4 flex items-center gap-2">
+            <Users size={18} className="text-white" />
+            <h3 className="text-sm font-bold text-white uppercase tracking-widest">Personal Activo ({filteredEmployees.length})</h3>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left whitespace-nowrap">
+          <div className="overflow-x-auto scrollbar-hide">
+            <table className="w-full text-left border-collapse table-fixed min-w-[1000px] lg:min-w-full">
               <thead>
-                <tr className="bg-white text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
-                  <th className="px-6 py-4">Código</th>
-                  <th className="px-6 py-4">Nombre Completo</th>
-                  <th className="px-6 py-4">Cargo</th>
-                  <th className="px-6 py-4">Área Asignada</th>
-                  <th className="px-6 py-4 text-right">Acciones</th>
+                <tr className="bg-gray-50 text-[9px] font-bold text-primary/70 uppercase tracking-tighter border-b border-gray-100">
+                  <th className="py-2 px-6 w-[120px]">Código</th>
+                  <th className="py-2 px-6 w-[250px]">Nombre Completo</th>
+                  <th className="py-2 px-6 w-[180px]">Cargo</th>
+                  <th className="py-2 px-6 w-[200px]">Área Asignada</th>
+                  <th className="py-2 px-6 w-[140px] text-center sticky right-0 bg-gray-50 border-l border-gray-100 z-10">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filteredEmployees.map((emp) => (
-                  <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-4 text-sm font-mono text-gray-500">{emp.code}</td>
-                    <td className="px-6 py-4">
+                  <tr key={emp.id} className="hover:bg-blue-50/20 transition-colors group">
+                    <td className="py-2 px-6 text-xs font-mono text-gray-400 truncate">{emp.code}</td>
+                    <td className="py-2 px-6">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs uppercase">
+                        <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
                            {(emp.first_name?.[0] || '')}{(emp.last_name?.[0] || '')}
                         </div>
-                        <span className="text-sm font-semibold text-primary">{emp.first_name} {emp.last_name}</span>
+                        <span className="text-xs font-semibold text-primary truncate block">{emp.first_name} {emp.last_name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{emp.position || '---'}</td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-gray-100 text-gray-700 text-xs font-semibold tracking-wide border border-gray-200">
-                        <MapPin size={12} />
-                        {emp.areas?.name || emp.area_name || 'Sin área oficial'}
+                    <td className="py-2 px-6 text-xs text-gray-600 truncate block">{emp.position || '---'}</td>
+                    <td className="py-2 px-6">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-gray-50 text-gray-600 text-[10px] font-bold tracking-tight border border-gray-200 uppercase">
+                        <MapPin size={10} />
+                        {emp.areas?.name || emp.area_name || 'N/A'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => openEditModal(emp)} className="p-2 text-gray-400 hover:text-primary bg-gray-50 hover:bg-primary/5 rounded transition-colors" title="Editar Empleado">
-                          <Edit2 size={16} />
+                    <td className="py-2 px-6 text-center sticky right-0 bg-white group-hover:bg-blue-50/20 transition-colors border-l border-gray-100 shadow-[ -5px_0_10px_-5px_rgba(0,0,0,0.05) ] z-10">
+                      <div className="flex items-center justify-center gap-2">
+                        <button 
+                          onClick={() => {
+                            setSelectedEmployee(emp);
+                            setAccessForm({ email: '', password: '', role: 'USER' });
+                            setIsAccessModalOpen(true);
+                          }} 
+                          className={`p-1 transition-colors ${emp.user_id ? 'text-green-500 hover:text-green-700' : 'text-gray-400 hover:text-orange-500'}`} 
+                          title={emp.user_id ? "Gestionar Acceso (Activo)" : "Crear Acceso"}
+                        >
+                          <Key size={14} fill={emp.user_id ? 'currentColor' : 'none'} />
                         </button>
-                        <button onClick={() => handleDeleteEmployee(emp.id, `${emp.first_name} ${emp.last_name}`)} className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded transition-colors" title="Eliminar Empleado">
-                          <Trash2 size={16} />
+                        <button onClick={() => openEditModal(emp)} className="p-1 text-gray-400 hover:text-primary transition-colors" title="Editar">
+                          <Edit2 size={14} />
+                        </button>
+                        <button onClick={() => handleDeleteEmployee(emp.id, `${emp.first_name} ${emp.last_name}`)} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Eliminar">
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
@@ -262,16 +275,129 @@ export default function EmpleadosPage() {
         </div>
       </div>
 
+      {/* Modal de Acceso */}
+      {isAccessModalOpen && selectedEmployee && (
+        <div className="fixed inset-0 bg-primary/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md shadow-2xl border border-gray-100 animate-in zoom-in duration-300">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <div>
+                <h3 className="text-sm font-bold text-primary uppercase tracking-widest flex items-center gap-2">
+                  <Shield size={16} /> {selectedEmployee.user_id ? 'Actualizar Acceso' : 'Crear Acceso al Sistema'}
+                </h3>
+                <p className="text-[10px] text-gray-500 mt-1 uppercase font-medium">Empleado: {selectedEmployee.first_name} {selectedEmployee.last_name}</p>
+              </div>
+              <button onClick={() => setIsAccessModalOpen(false)} className="text-gray-400 hover:text-primary transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-8 space-y-6">
+              {accessMessage && (
+                <div className={`p-3 text-xs font-bold uppercase tracking-wider border ${
+                  accessMessage.type === 'success' ? 'bg-green-50 border-green-100 text-green-600' : 'bg-red-50 border-red-100 text-red-600'
+                }`}>
+                  {accessMessage.text}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                    <Mail size={12} /> Correo Electrónico
+                  </label>
+                  <input 
+                    type="email"
+                    value={accessForm.email}
+                    onChange={(e) => setAccessForm({...accessForm, email: e.target.value})}
+                    placeholder="ejemplo@empresa.com"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                    <Lock size={12} /> Contraseña
+                  </label>
+                  <input 
+                    type="password"
+                    value={accessForm.password}
+                    onChange={(e) => setAccessForm({...accessForm, password: e.target.value})}
+                    placeholder="••••••••"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                    <Shield size={12} /> Rol del Usuario
+                  </label>
+                  <select 
+                    value={accessForm.role}
+                    onChange={(e) => setAccessForm({...accessForm, role: e.target.value})}
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition-all"
+                  >
+                    <option value="ADMIN">ADMINISTRADOR (Todo)</option>
+                    <option value="ALMACEN">ALMACÉN (Inventario/Compras)</option>
+                    <option value="USER">USUARIO (Solo Requisas)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button 
+                  onClick={async () => {
+                    setIsCreatingAccess(true);
+                    setAccessMessage(null);
+                    try {
+                      const response = await fetch('/api/admin/create-access', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          ...accessForm,
+                          employeeId: selectedEmployee.id,
+                          first_name: selectedEmployee.first_name,
+                          last_name: selectedEmployee.last_name
+                        })
+                      });
+                      const data = await response.json();
+                      if (data.error) throw new Error(data.error);
+                      
+                      setAccessMessage({ type: 'success', text: 'Acceso creado exitosamente.' });
+                      fetchData();
+                      setTimeout(() => setIsAccessModalOpen(false), 2000);
+                    } catch (err: any) {
+                      setAccessMessage({ type: 'error', text: err.message });
+                    } finally {
+                      setIsCreatingAccess(false);
+                    }
+                  }}
+                  disabled={isCreatingAccess || !accessForm.email || !accessForm.password}
+                  className="flex-1 bg-primary text-white py-3 text-xs font-bold uppercase tracking-widest hover:bg-primary-dark transition-colors disabled:opacity-50"
+                >
+                  {isCreatingAccess ? 'Procesando...' : (selectedEmployee.user_id ? 'Actualizar Acceso' : 'Habilitar Acceso')}
+                </button>
+                <button 
+                  onClick={() => setIsAccessModalOpen(false)}
+                  className="px-6 py-3 text-xs font-bold uppercase tracking-widest text-gray-500 hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- MODAL: NUEVA ÁREA --- */}
       {isAreaModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary-dark/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white max-w-md w-full shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-200">
-            <div className="bg-gray-50 border-b border-gray-100 p-5 flex justify-between items-center">
+            <div className="bg-primary border-b-2 border-white/20 p-5 flex justify-between items-center">
               <div className="flex items-center gap-3">
-                <MapPin className="text-primary" size={24} />
-                <h2 className="text-xl font-light text-primary tracking-tight">Crear Área</h2>
+                <MapPin className="text-white" size={24} />
+                <h2 className="text-xl font-light text-white tracking-tight">Crear Área</h2>
               </div>
-              <button onClick={() => setIsAreaModalOpen(false)} className="text-gray-400 hover:text-red-500 bg-white hover:bg-red-50 p-2 rounded-full transition-colors border border-transparent hover:border-red-100">
+              <button onClick={() => setIsAreaModalOpen(false)} className="text-white/60 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors border border-white/10">
                 <X size={20} />
               </button>
             </div>
@@ -326,12 +452,12 @@ export default function EmpleadosPage() {
       {isEmployeeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary-dark/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white max-w-xl w-full shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-200">
-            <div className="bg-gray-50 border-b border-gray-100 p-5 flex justify-between items-center">
+            <div className="bg-primary border-b-2 border-white/20 p-5 flex justify-between items-center">
               <div className="flex items-center gap-3">
-                <Users className="text-primary" size={24} />
-                <h2 className="text-xl font-light text-primary tracking-tight">{editingEmployee ? 'Editar Empleado' : 'Registrar Empleado'}</h2>
+                <Users className="text-white" size={24} />
+                <h2 className="text-xl font-light text-white tracking-tight">{editingEmployee ? 'Editar Empleado' : 'Registrar Empleado'}</h2>
               </div>
-              <button onClick={closeEmployeeModal} className="text-gray-400 hover:text-red-500 bg-white hover:bg-red-50 p-2 rounded-full transition-colors border border-transparent hover:border-red-100">
+              <button onClick={closeEmployeeModal} className="text-white/60 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors border border-white/10">
                 <X size={20} />
               </button>
             </div>

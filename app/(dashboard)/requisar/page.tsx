@@ -12,16 +12,37 @@ export default function RequisarPage() {
   
   const [requisitions, setRequisitions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
-  const fetchRequisitions = async () => {
+  const fetchProfileAndRequisitions = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
+    
+    // 1. Obtener perfil
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*, employees(*)')
+      .eq('id', session.user.id)
+      .single();
+    
+    setUserProfile(profile);
+
+    // 2. Obtener requisas con filtro opcional
+    let query = supabase
       .from('requisitions')
       .select(`
         *,
         requisition_items ( quantity )
-      `)
-      .order('created_at', { ascending: false });
+      `);
+    
+    // Si es Usuario Normal, filtrar por su área
+    if (profile?.role === 'USER' && profile.employees?.area_id) {
+      query = query.eq('area_id', profile.employees.area_id);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching requisitions:', error);
@@ -32,14 +53,14 @@ export default function RequisarPage() {
   };
 
   useEffect(() => {
-    fetchRequisitions();
+    fetchProfileAndRequisitions();
   }, []);
 
   const handleDelete = async (id: string) => {
     if (confirm(`¿Estás seguro de eliminar permanentemente la requisa?`)) {
       const { error } = await supabase.from('requisitions').delete().eq('id', id);
       if (error) alert('Error eliminando requisa: ' + error.message);
-      else fetchRequisitions();
+      else fetchProfileAndRequisitions();
     }
   };
 
@@ -47,7 +68,7 @@ export default function RequisarPage() {
     if (confirm(`¿Estás seguro de marcar esta requisa como ${newStatus}?`)) {
       const { error } = await supabase.from('requisitions').update({ status: newStatus }).eq('id', id);
       if (error) alert('Error actualizando estado: ' + error.message);
-      else fetchRequisitions();
+      else fetchProfileAndRequisitions();
     }
   };
 
@@ -57,7 +78,7 @@ export default function RequisarPage() {
     switch(status) {
       case 'ENTREGADA': return 'text-green-600 border-green-200 bg-green-50';
       case 'CANCELADA': return 'text-red-500 border-red-200 bg-red-50';
-      case 'PENDIENTE': return 'text-yellow-600 border-yellow-200 bg-yellow-50';
+      case 'PENDIENTE': return 'text-blue-600 border-blue-200 bg-blue-50';
       case 'PENDIENTE DE APROBACION': return 'text-orange-600 border-orange-200 bg-orange-50';
       default: return 'text-gray-500 border-gray-200 bg-gray-50';
     }
@@ -111,7 +132,7 @@ export default function RequisarPage() {
           </div>
           <input
             type="text"
-            placeholder="Buscar por código UUID, área, estado o cantidad..."
+            placeholder="Buscar por código, área, solicitante o estado..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full py-2 bg-transparent text-sm focus:outline-none placeholder-gray-400 text-primary"
@@ -135,103 +156,126 @@ export default function RequisarPage() {
         </div>
       </div>
 
-      {/* Grid List */}
-      <div className="relative min-h-[400px]">
+      {/* Table Container */}
+      <div className="bg-white border border-gray-100 shadow-sm overflow-hidden relative min-h-[400px]">
+        {/* Table Header Bar */}
+        <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
+          <h2 className="text-xs font-bold text-white uppercase tracking-widest">
+            Listado de Requisas — {filteredRequisitions.length.toLocaleString()} resultados
+          </h2>
+        </div>
+
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-transparent backdrop-blur-[1px] z-20">
+          <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-sm z-20">
              <Loader2 size={32} className="animate-spin text-primary" />
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredRequisitions.length > 0 ? (
-            filteredRequisitions.map((req) => {
-              const totalItems = req.requisition_items?.reduce((acc: number, curr: any) => acc + (curr.quantity || 0), 0) || 0;
-              const dateStr = new Date(req.created_at).toLocaleDateString();
-              const shortenedId = req.id.split('-')[0];
+        <div className="overflow-x-auto scrollbar-hide">
+          <table className="w-full text-left border-collapse table-fixed min-w-[1000px] lg:min-w-full">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100 text-[9px] font-bold text-primary/70 uppercase tracking-tighter">
+                <th className="py-2 px-6 w-[140px]">Código</th>
+                <th className="py-2 px-6 w-[150px]">Área</th>
+                <th className="py-2 px-6 w-[180px]">Solicitante</th>
+                <th className="py-2 px-6 w-[100px]">Fecha</th>
+                <th className="py-2 px-6 w-[100px] text-center">Artículos</th>
+                <th className="py-2 px-6 w-[130px] text-center">Estado</th>
+                <th className="py-2 px-6 w-[140px] text-center sticky right-0 bg-gray-50 border-l border-gray-100 z-10">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filteredRequisitions.length > 0 ? (
+                filteredRequisitions.map((req) => {
+                  const totalItems = req.requisition_items?.reduce((acc: number, curr: any) => acc + (curr.quantity || 0), 0) || 0;
+                  const dateStr = new Date(req.created_at).toLocaleDateString();
 
-              return (
-                <div key={req.id} className="bg-white border border-gray-100 p-8 shadow-sm hover:shadow-md hover:border-primary/20 transition-all duration-300 flex flex-col justify-between min-h-[14rem] group relative">
-                  
-                  {/* Card Actions (Hover Overlay) */}
-                  <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                     {req.status === 'PENDIENTE' && (
-                       <>
-                         <button 
-                          onClick={() => updateStatus(req.id, 'ENTREGADA')}
-                          className="p-1.5 bg-gray-50 text-gray-400 hover:text-green-600 border border-gray-200 hover:border-green-300 transition-colors" 
-                          title="Marcar como Entregada (Descuenta Inventario)"
-                         >
-                           <Check size={14} strokeWidth={3} />
-                         </button>
-                         <button 
-                          onClick={() => updateStatus(req.id, 'CANCELADA')}
-                          className="p-1.5 bg-gray-50 text-gray-400 hover:text-red-500 border border-gray-200 hover:border-red-300 transition-colors" 
-                          title="Cancelar Requisa (Libera Inventario)"
-                         >
-                           <X size={14} strokeWidth={3} />
-                         </button>
-                       </>
-                     )}
-                     
-                     {req.status === 'PENDIENTE DE APROBACION' && (
-                       <button 
-                         onClick={() => updateStatus(req.id, 'PENDIENTE')}
-                         className="p-1.5 bg-orange-50 text-orange-400 hover:text-orange-600 border border-orange-200 hover:border-orange-600 transition-colors" 
-                         title="Autorizar Exceso de Presupuesto/Límites"
-                       >
-                         <Check size={14} strokeWidth={3} />
-                       </button>
-                     )}
-                     <Link 
-                      href={`/requisar/${req.id}?print=true`}
-                      className="p-1.5 bg-gray-50 text-gray-400 hover:text-blue-500 border border-gray-200 hover:border-blue-200 transition-colors inline-block" 
-                      title="Imprimir Requisa en Media Carta"
-                     >
-                       <Printer size={14} />
-                     </Link>
-                     <button 
-                      onClick={() => handleDelete(req.id)}
-                      className="p-1.5 bg-gray-50 text-gray-400 hover:text-red-500 border border-gray-200 hover:border-red-200 transition-colors" 
-                      title="Eliminar Requisa Permanentemente"
-                     >
-                       <Trash2 size={14} />
-                     </button>
-                  </div>
-
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <span className="font-light text-2xl tracking-tight text-primary group-hover:text-accent transition-colors block">REQ-{shortenedId}</span>
-                      <span className="text-[10px] text-gray-400 font-mono tracking-wider">{req.id}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2 my-auto z-10 relative">
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                      Área: <span className="text-primary">{req.area_name || 'Sin Área'}</span>
-                    </p>
-                    <p className="text-sm text-gray-500">Artículos solicitados: <span className="font-semibold text-primary">{totalItems}</span></p>
-                    <p className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Solcitado por: <span className="text-gray-600 font-medium">{req.requester_name || 'Anónimo'}</span> el {dateStr}</p>
-                  </div>
-
-                  <div className="mt-auto pt-4 border-t border-gray-100 flex justify-between items-center z-10 w-full">
-                    <span className={`text-[10px] font-bold px-2 py-1 border uppercase tracking-widest ${getStatusColor(req.status)}`}>
-                      {req.status}
-                    </span>
-                    <Link href={`/requisar/${req.id}`} className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-primary transition-colors">
-                      <Eye size={14} /> Detalles
-                    </Link>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            !isLoading && (
-              <div className="col-span-full py-12 text-center text-gray-400 text-sm bg-white border border-gray-100 shadow-sm">
-                No se encontraron requisas con los filtros actuales.
-              </div>
-            )
-          )}
+                  return (
+                    <tr key={req.id} className="hover:bg-blue-50/20 transition-colors group">
+                      <td className="py-2 px-6">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-primary">REQ-{String(req.consecutive || 0).padStart(6, '0')}</span>
+                          <span className="text-[9px] text-gray-400 font-mono truncate">{req.id.split('-')[0]}...</span>
+                        </div>
+                      </td>
+                      <td className="py-2 px-6">
+                        <span className="text-xs text-gray-700 font-medium truncate block">{req.area_name || 'Sin Área'}</span>
+                      </td>
+                      <td className="py-2 px-6">
+                        <span className="text-xs text-gray-600 truncate block">{req.requester_name || 'Anónimo'}</span>
+                      </td>
+                      <td className="py-2 px-6 text-xs text-gray-500 italic">
+                        {dateStr}
+                      </td>
+                      <td className="py-2 px-6 text-xs text-center font-bold text-primary">
+                        {totalItems}
+                      </td>
+                      <td className="py-2 px-6 text-center">
+                        <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border ${getStatusColor(req.status)}`}>
+                          {req.status}
+                        </span>
+                      </td>
+                      <td className="py-2 px-6 text-center sticky right-0 bg-white group-hover:bg-blue-50/20 transition-colors border-l border-gray-100 shadow-[ -5px_0_10px_-5px_rgba(0,0,0,0.05) ] z-10">
+                        <div className="flex items-center justify-center gap-2">
+                           {req.status === 'PENDIENTE' && (
+                             <>
+                               <button 
+                                onClick={() => updateStatus(req.id, 'ENTREGADA')}
+                                className="p-1 text-gray-400 hover:text-green-600 transition-colors" 
+                                title="Entregar"
+                               >
+                                 <Check size={14} strokeWidth={3} />
+                               </button>
+                               <button 
+                                onClick={() => updateStatus(req.id, 'CANCELADA')}
+                                className="p-1 text-gray-400 hover:text-red-500 transition-colors" 
+                                title="Cancelar"
+                               >
+                                 <X size={14} strokeWidth={3} />
+                               </button>
+                             </>
+                           )}
+                           
+                           {req.status === 'PENDIENTE DE APROBACION' && (
+                             <button 
+                                onClick={() => updateStatus(req.id, 'PENDIENTE')}
+                                className="p-1 text-orange-400 hover:text-orange-600 transition-colors" 
+                                title="Autorizar"
+                             >
+                               <Check size={14} strokeWidth={3} />
+                             </button>
+                           )}
+                           <Link 
+                            href={`/requisar/${req.id}?print=true`}
+                            className="p-1 text-gray-400 hover:text-blue-500 transition-colors" 
+                            title="Imprimir"
+                           >
+                             <Printer size={14} />
+                           </Link>
+                           <Link href={`/requisar/${req.id}`} className="p-1 text-gray-400 hover:text-primary transition-colors" title="Detalles">
+                             <Eye size={14} />
+                           </Link>
+                           <button 
+                            onClick={() => handleDelete(req.id)}
+                            className="p-1 text-gray-400 hover:text-red-500 transition-colors" 
+                            title="Eliminar"
+                           >
+                             <Trash2 size={14} />
+                           </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-400 text-sm">
+                    {isLoading ? 'Cargando requisas...' : 'No se encontraron requisas con los filtros actuales.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

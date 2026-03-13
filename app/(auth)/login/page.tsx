@@ -25,7 +25,7 @@ export default function LoginPage() {
       });
 
       if (error) throw error;
-      
+
       // Successfully logged in
       router.replace('/dashboard');
     } catch (error: any) {
@@ -40,18 +40,18 @@ export default function LoginPage() {
       {/* Left Axis: Abstract Premium Image */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-primary-dark">
         <Image
-          src="/login-bg.png"
+          src="/login-bg.jpg"
           alt="Warehouse Abstract Concept"
           fill
           unoptimized
-          className="object-cover opacity-80 mix-blend-screen"
+          className="object-cover opacity-80 mix-blend-screen animate-in fade-in duration-1000"
           priority
         />
         <div className="absolute inset-0 bg-gradient-to-r from-primary-dark/80 to-transparent" />
-        
+
         <div className="absolute bottom-16 left-16 z-10 max-w-lg">
           <h2 className="text-4xl md:text-5xl font-bold tracking-widest uppercase text-white leading-tight">
-            Gestión Inteligente de <span className="text-accent">Almacenes.</span>
+            Gestión Inteligente de <span className="text-yellow-400">Almacenes.</span>
           </h2>
           <p className="mt-4 text-white font-medium tracking-wide text-lg">
             Control preciso, análisis dinámico y trazabilidad absoluta en cada requisa.
@@ -77,7 +77,7 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
-            
+
             {/* Error Banner */}
             {errorMsg && (
               <div className="p-4 bg-red-50 text-red-600 border border-red-200 text-sm flex items-start gap-3 animate-in fade-in zoom-in-95 duration-300">
@@ -133,7 +133,7 @@ export default function LoginPage() {
                 </>
               )}
             </button>
-            
+
           </form>
 
           <p className="mt-8 text-center text-xs text-gray-400">

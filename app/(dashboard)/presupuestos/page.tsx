@@ -104,18 +104,18 @@ export default function PresupuestosPage() {
           
           {/* SECTION 1: AREA BUDGETS */}
           <div className="bg-white border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-            <div className="bg-gray-50 border-b border-gray-100 p-5 flex flex-col gap-4">
+            <div className="bg-primary border-b-2 border-white/20 p-5 flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <DollarSign size={22} className="text-primary" />
+                  <DollarSign size={20} className="text-white" />
                   <div>
-                    <h3 className="text-base font-bold text-gray-800 tracking-tight">Presupuesto por Área</h3>
-                    <p className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold mt-0.5">Asignación Mensual USD</p>
+                    <h3 className="text-sm font-bold text-white tracking-widest uppercase">Presupuesto por Área</h3>
+                    <p className="text-[10px] text-white/60 uppercase tracking-widest font-semibold mt-0.5">Asignación Mensual USD</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Total Asignado</p>
-                  <p className="text-xl font-bold text-primary">${totalBudgetAssigned.toFixed(2)}</p>
+                  <p className="text-[9px] uppercase tracking-widest font-bold text-white/40">Total Asignado</p>
+                  <p className="text-lg font-bold text-white">${totalBudgetAssigned.toFixed(2)}</p>
                 </div>
               </div>
               <div className="relative">
@@ -125,14 +125,14 @@ export default function PresupuestosPage() {
                   placeholder="Buscar área..." 
                   value={areaSearch}
                   onChange={e => setAreaSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:border-primary transition-colors"
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-white/10 border border-white/20 rounded focus:outline-none focus:border-white/40 transition-colors text-white placeholder-white/50"
                 />
               </div>
             </div>
             
             <div className="p-0 overflow-y-auto max-h-[600px]">
               <table className="w-full text-left whitespace-nowrap">
-                <thead className="sticky top-0 bg-white border-b border-gray-100 z-10 shadow-sm">
+                <thead className="sticky top-0 bg-gray-50 border-b border-gray-100 z-10 shadow-sm">
                   <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                     <th className="px-6 py-4">Área Organizacional</th>
                     <th className="px-6 py-4 text-right">Tope USD Mensual</th>
@@ -140,7 +140,7 @@ export default function PresupuestosPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filteredAreas.map((area) => (
-                    <tr key={area.id} className="hover:bg-gray-50/50 transition-colors group">
+                    <tr key={area.id} className="hover:bg-gray-50 transition-colors group">
                       <td className="px-6 py-4">
                         <span className="text-sm font-semibold text-primary">{area.name}</span>
                       </td>
@@ -159,7 +159,7 @@ export default function PresupuestosPage() {
                           <button 
                             onClick={() => saveAreaBudget(area.id)}
                             disabled={savingArea === area.id}
-                            className={`p-2 rounded transition-colors ${savingArea === area.id ? 'bg-gray-100 text-gray-400' : 'bg-primary/5 text-primary hover:bg-primary/10'}`}
+                            className={`p-2 rounded transition-colors ${savingArea === area.id ? 'bg-gray-100 text-gray-400' : 'bg-gray-50 text-primary hover:bg-primary/10'}`}
                             title="Guardar Presupuesto"
                           >
                             {savingArea === area.id ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
@@ -182,12 +182,12 @@ export default function PresupuestosPage() {
 
           {/* SECTION 2: PRODUCT LIMITS */}
           <div className="bg-white border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-            <div className="bg-gray-50 border-b border-gray-100 p-5 flex flex-col gap-4">
+            <div className="bg-primary border-b-2 border-white/20 p-5 flex flex-col gap-4">
               <div className="flex items-center gap-3">
-                <Package size={22} className="text-primary" />
+                <Package size={20} className="text-white" />
                 <div>
-                  <h3 className="text-base font-bold text-gray-800 tracking-tight">Límites por Producto</h3>
-                  <p className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold mt-0.5">Consumo Global Máximo (Unidades)</p>
+                  <h3 className="text-sm font-bold text-white tracking-widest uppercase">Límites por Producto</h3>
+                  <p className="text-[10px] text-white/60 uppercase tracking-widest font-semibold mt-0.5">Consumo Global Máximo (Unidades)</p>
                 </div>
               </div>
               <div className="relative">
@@ -197,14 +197,14 @@ export default function PresupuestosPage() {
                   placeholder="Buscar producto por nombre o código..." 
                   value={productSearch}
                   onChange={e => setProductSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:border-primary transition-colors"
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-white/10 border border-white/20 rounded focus:outline-none focus:border-white/40 transition-colors text-white placeholder-white/50"
                 />
               </div>
             </div>
             
             <div className="p-0 overflow-y-auto max-h-[600px]">
               <table className="w-full text-left whitespace-nowrap">
-                <thead className="sticky top-0 bg-white border-b border-gray-100 z-10 shadow-sm">
+                <thead className="sticky top-0 bg-gray-50 border-b border-gray-100 z-10 shadow-sm">
                   <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                     <th className="px-6 py-4">Artículo de Inventario</th>
                     <th className="px-6 py-4 text-right">Límite (Unds)</th>
@@ -212,7 +212,7 @@ export default function PresupuestosPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filteredProducts.map((prod) => (
-                    <tr key={prod.id} className="hover:bg-gray-50/50 transition-colors group">
+                    <tr key={prod.id} className="hover:bg-gray-50 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                            <span className="text-sm font-semibold text-primary">{prod.name}</span>
@@ -233,7 +233,7 @@ export default function PresupuestosPage() {
                           <button 
                             onClick={() => saveProductLimit(prod.id)}
                             disabled={savingProduct === prod.id}
-                            className={`p-2 rounded transition-colors ${savingProduct === prod.id ? 'bg-gray-100 text-gray-400' : 'bg-primary/5 text-primary hover:bg-primary/10'}`}
+                            className={`p-2 rounded transition-colors ${savingProduct === prod.id ? 'bg-gray-100 text-gray-400' : 'bg-gray-50 text-primary hover:bg-primary/10'}`}
                             title="Guardar Límite"
                           >
                             {savingProduct === prod.id ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}

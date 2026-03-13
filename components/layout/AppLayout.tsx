@@ -3,18 +3,27 @@ import { useState } from 'react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+interface AppLayoutProps {
+  children: React.ReactNode;
+  userProfile?: any;
+}
+
+export default function AppLayout({ children, userProfile }: AppLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (
     <div className="flex h-screen print:h-auto bg-gray-50 print:bg-white overflow-hidden print:overflow-visible text-primary">
       <div className="print:hidden z-50 h-full">
-        <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+        <Sidebar 
+          isOpen={isSidebarOpen} 
+          setIsOpen={setIsSidebarOpen} 
+          userRole={userProfile?.role} 
+        />
       </div>
       
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden print:overflow-visible">
         <div className="print:hidden">
-          <Topbar onMenuClick={() => setIsSidebarOpen(true)} />
+          <Topbar onMenuClick={() => setIsSidebarOpen(true)} userProfile={userProfile} />
         </div>
         
         <main className="flex-1 overflow-y-auto print:overflow-visible p-4 md:p-6 lg:p-8 print:p-0 bg-background print:bg-white">

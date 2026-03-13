@@ -1,24 +1,32 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, ClipboardList, Wallet, Users, X, Settings } from 'lucide-react';
+import { LayoutDashboard, Package, ClipboardList, Wallet, Users, X, Settings, BookOpen, ShoppingCart } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
+  userRole?: 'ADMIN' | 'ALMACEN' | 'USER';
 }
 
-export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
+export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
   const pathname = usePathname();
 
-  const navItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Almacén', href: '/almacen', icon: Package },
-    { name: 'Requisar', href: '/requisar', icon: ClipboardList },
-    { name: 'Presupuestos', href: '/presupuestos', icon: Wallet },
-    { name: 'Empleados', href: '/empleados', icon: Users },
-    { name: 'Configuración', href: '/configuracion', icon: Settings },
+  const allNavItems = [
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'ALMACEN'] },
+    { name: 'Almacén', href: '/almacen', icon: Package, roles: ['ADMIN', 'ALMACEN'] },
+    { name: 'Compras', href: '/compras', icon: ShoppingCart, roles: ['ADMIN', 'ALMACEN'] },
+    { name: 'Requisar', href: '/requisar', icon: ClipboardList, roles: ['ADMIN', 'ALMACEN', 'USER'] },
+    { name: 'Registros', href: '/registros', icon: BookOpen, roles: ['ADMIN', 'ALMACEN'] },
+    { name: 'Presupuestos', href: '/presupuestos', icon: Wallet, roles: ['ADMIN'] },
+    { name: 'Empleados', href: '/empleados', icon: Users, roles: ['ADMIN'] },
+    { name: 'Configuración', href: '/configuracion', icon: Settings, roles: ['ADMIN'] },
   ];
+
+  // Si no hay rol (usuario manual/admin inicial), mostrar todo por defecto para evitar bloqueos
+  const navItems = userRole 
+    ? allNavItems.filter(item => item.roles.includes(userRole))
+    : allNavItems;
 
   return (
     <>
