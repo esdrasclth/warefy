@@ -49,40 +49,12 @@ export default function ComprasPage() {
     if (!confirm('¿Deseas registrar la recepción de esta compra? Esto incrementará el stock en el inventario.')) return;
 
     try {
-      // 1. Get purchase items
-      const { data: items, error: itemsError } = await supabase
-        .from('purchase_items')
-        .select('*')
-        .eq('purchase_id', purchase.id);
+      // SECURITY: Operación atómica en BD para evitar inconsistencias de inventario
+      const { error } = await supabase.rpc('receive_purchase', {
+        p_purchase_id: purchase.id
+      });
 
-      if (itemsError || !items) throw new Error('Error al obtener los artículos de la compra');
-
-      // 2. Update inventory for each item
-      for (const item of items) {
-        // We use an RPC or multiple updates. For simplicity and since it's a small internal app, we do it in a loop
-        // Ideally this should be a DB function to ensure atomicity.
-        const { data: currentItem } = await supabase
-          .from('inventory_items')
-          .select('quantity')
-          .eq('id', item.inventory_item_id)
-          .single();
-
-        if (currentItem) {
-          const newQty = (currentItem.quantity || 0) + item.quantity;
-          await supabase
-            .from('inventory_items')
-            .update({ quantity: newQty })
-            .eq('id', item.inventory_item_id);
-        }
-      }
-
-      // 3. Update purchase status
-      const { error: updateError } = await supabase
-        .from('purchases')
-        .update({ status: 'RECIBIDA' })
-        .eq('id', purchase.id);
-
-      if (updateError) throw updateError;
+      if (error) throw error;
 
       alert('Compra recibida e inventario actualizado con éxito.');
       fetchPurchases();

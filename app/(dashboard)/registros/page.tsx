@@ -88,8 +88,9 @@ export default function RegistrosPage() {
     setIsLoading(true);
     const from = page * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
+    const searchValue = debouncedSearch.trim();
 
-    const { data, error, count } = await supabase
+    let query = supabase
       .from('requisition_items')
       .select(`
         id,
@@ -113,6 +114,20 @@ export default function RegistrosPage() {
         )
       `, { count: 'exact' })
       .not('requisitions', 'is', null)
+      .neq('requisitions.status', 'CANCELADA');
+
+    if (searchValue) {
+      const q = searchValue.replace(/%/g, '\\%').replace(/_/g, '\\_');
+      query = query.or(
+        `inventory_items.code.ilike.%${q}%` +
+        `,inventory_items.name.ilike.%${q}%` +
+        `,requisitions.requester_name.ilike.%${q}%` +
+        `,requisitions.requester_code.ilike.%${q}%` +
+        `,requisitions.area_name.ilike.%${q}%`
+      );
+    }
+
+    const { data, error, count } = await query
       .order('created_at', { ascending: false })
       .range(from, to);
 
@@ -123,21 +138,6 @@ export default function RegistrosPage() {
     }
 
     const mapped = (data || [])
-      .filter((item: any) => item.requisitions && item.requisitions.status !== 'CANCELADA')
-      .filter((item: any) => {
-        if (!debouncedSearch) return true;
-        const q = debouncedSearch.toLowerCase();
-        const r = item.requisitions as any;
-        const inv = item.inventory_items as any;
-        return (
-          (r?.id || '').toLowerCase().includes(q) ||
-          (inv?.code || '').toLowerCase().includes(q) ||
-          (inv?.name || '').toLowerCase().includes(q) ||
-          (r?.requester_name || '').toLowerCase().includes(q) ||
-          (r?.requester_code || '').toLowerCase().includes(q) ||
-          (r?.area_name || '').toLowerCase().includes(q)
-        );
-      })
       .map((item: any): RegistroRow => {
         const req = item.requisitions as any;
         const inv = item.inventory_items as any;

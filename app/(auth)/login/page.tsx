@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/utils/supabase/client';
 import { Loader2, ArrowRight, Lock, Mail, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
@@ -12,6 +12,22 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const errorParam = searchParams.get('error');
+
+  // Mensaje de error personalizado según query param
+  const getErrorMessage = () => {
+    if (errorParam === 'no_profile') {
+      return 'Tu cuenta no tiene permisos asignados. Contacta al administrador.';
+    }
+    if (errorParam === 'invalid_role') {
+      return 'Tu rol no es válido. Contacta al administrador.';
+    }
+    if (errorParam === 'auth_error') {
+      return 'Error de autenticación. Intenta de nuevo o contacta a soporte.';
+    }
+    return errorMsg;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,10 +95,10 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-6">
 
             {/* Error Banner */}
-            {errorMsg && (
+            {(getErrorMessage()) && (
               <div className="p-4 bg-red-50 text-red-600 border border-red-200 text-sm flex items-start gap-3 animate-in fade-in zoom-in-95 duration-300">
                 <AlertCircle size={18} className="mt-0.5 shrink-0" />
-                <span>{errorMsg}</span>
+                <span>{getErrorMessage()}</span>
               </div>
             )}
 

@@ -41,34 +41,52 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           .single();
 
         if (profileError) {
-          // PGRST116 means no rows found (expected for initial admin or users without roles)
-          if (profileError.code !== 'PGRST116') {
-            console.error('Error fetching profile:', profileError);
+          // SECURITY: Usuarios sin perfil o con error de auth no deben acceder al dashboard
+          if (profileError.code === 'PGRST116') {
+            router.replace('/login?error=no_profile');
+            return;
           }
-          // Permitir acceso como ADMIN por defecto si no hay perfil (para el admin inicial)
-          setIsChecking(false);
+
+          console.error('Error fetching profile:', profileError);
+          // SECURITY: Redirigir cualquier error de perfil a un flujo de auth seguro
+          router.replace('/login?error=auth_error');
           return;
         }
 
         setProfile(profileData);
 
-        // RBAC: Route Protection
-        const role = profileData?.role || 'ADMIN';
-        const isUserAccessingUnauthorized = (
-          (role === 'USER' && (pathname === '/dashboard' || !['/dashboard', '/requisar'].some(path => pathname.startsWith(path)))) ||
-          (role === 'ALMACEN' && ['/empleados', '/presupuestos', '/configuracion'].some(path => pathname.startsWith(path)))
-        );
+        // RBAC: Whitelist-based Route Protection
+        const role = profileData?.role;
 
-        if (isUserAccessingUnauthorized) {
-          const redirectPath = role === 'USER' ? '/requisar' : '/dashboard';
-          router.replace(redirectPath);
-        } else {
-          setIsChecking(false);
+        // Rutas permitidas por rol (whitelist)
+        const ROLE_WHITELIST: Record<string, string[]> = {
+          ADMIN: ['/dashboard', '/almacen', '/requisar', '/compras', '/empleados', '/presupuestos', '/configuracion', '/registros'],
+          ALMACEN: ['/dashboard', '/almacen', '/requisar', '/compras', '/registros'],
+          USER: ['/requisar'],
+        };
+
+        const roleAllowedRoutes = role ? ROLE_WHITELIST[role] : undefined;
+        if (!roleAllowedRoutes) {
+          // SECURITY: Bloquear roles inexistentes o faltantes
+          router.replace('/login?error=invalid_role');
+          return;
         }
+
+        const isPathAllowed = roleAllowedRoutes.some(path => pathname.startsWith(path));
+        if (!isPathAllowed) {
+          // SECURITY: Denegar cualquier ruta no incluida explícitamente en el whitelist
+          const redirectPath = role === 'USER' ? '/requisar' : '/dashboard';
+          if (role !== 'ADMIN') {
+            router.replace(redirectPath);
+            return;
+          }
+        }
+
+        setIsChecking(false);
 
       } catch (error) {
         console.error('Error checking auth session:', error);
-        router.replace('/login');
+        router.replace('/login?error=auth_error');
       }
     };
 
