@@ -12,6 +12,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
   const searchParams = useSearchParams();
   
   const [requisition, setRequisition] = useState<any | null>(null);
+  const [userProfile, setUserProfile] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [deliveredQuantities, setDeliveredQuantities] = useState<Record<string, number>>({});
   
@@ -46,8 +47,22 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
     setIsLoading(false);
   };
 
+  const fetchUserProfile = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, employees(area_id)')
+      .eq('id', session.user.id)
+      .single();
+
+    setUserProfile(profile || null);
+  };
+
   useEffect(() => {
     fetchRequisition();
+    fetchUserProfile();
   }, [reqId]);
 
   useEffect(() => {
@@ -100,6 +115,9 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
 
   const shortenedId = reqId.split('-')[0];
   const dateStr = new Date(requisition.created_at).toLocaleString();
+  const isAdminOrAlmacen = userProfile?.role === 'ADMIN' || userProfile?.role === 'ALMACEN';
+  const isUser = userProfile?.role === 'USER';
+  const isOwnArea = requisition.area_id === userProfile?.employees?.area_id;
   
   const effectiveTotalItems = requisition.requisition_items?.reduce((acc: number, item: any) => {
     const qty = requisition.status === 'PENDIENTE' 
@@ -154,20 +172,24 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
         <div className="flex gap-3 w-full md:w-auto print:hidden">
           {requisition.status === 'PENDIENTE' && (
             <>
-              <button 
-                onClick={() => updateStatus('ENTREGADA')}
-                className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-bold shadow-sm transition-colors"
-                title="Descontar inventario y finalizar"
-              >
-                <Check size={16} strokeWidth={3} /> Entregar
-              </button>
-              <button 
-                onClick={() => updateStatus('CANCELADA')}
-                className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors"
-                title="Liberar el inventario comprometido"
-              >
-                <X size={16} strokeWidth={3} /> Cancelar
-              </button>
+              {isAdminOrAlmacen && (
+                <button 
+                  onClick={() => updateStatus('ENTREGADA')}
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-bold shadow-sm transition-colors"
+                  title="Descontar inventario y finalizar"
+                >
+                  <Check size={16} strokeWidth={3} /> Entregar
+                </button>
+              )}
+              {(isAdminOrAlmacen || (isUser && isOwnArea)) && (
+                <button 
+                  onClick={() => updateStatus('CANCELADA')}
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors"
+                  title="Liberar el inventario comprometido"
+                >
+                  <X size={16} strokeWidth={3} /> Cancelar
+                </button>
+              )}
             </>
           )}
           
