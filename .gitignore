@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Archivos de datos y exportaciones — nunca subir al repo
+public/*.xlsx
+public/*.xls
+public/*.csv
+public/*.pdf
+*.xlsx
+*.xls
