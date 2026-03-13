@@ -293,7 +293,7 @@ export default function NuevaRequisaView() {
 
 
   return (
-    <div className="space-y-8 pb-12">
+    <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto pb-12">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-100 pb-6">
         <div className="flex items-center gap-4">
@@ -353,7 +353,7 @@ export default function NuevaRequisaView() {
                     <button
                       key={emp.id}
                       onClick={() => { setRequesterData(emp); setRequesterSearchInput(`${emp.first_name} ${emp.last_name}`); setRequesterResults([]); }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors"
+                      className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors"
                     >
                       <p className="text-sm font-semibold text-primary">{emp.first_name} {emp.last_name}</p>
                       <p className="text-[10px] text-gray-400 font-mono italic">{emp.code} • {emp.position || 'Emp.'} • {emp.area_name}</p>
@@ -369,7 +369,7 @@ export default function NuevaRequisaView() {
                   <p className="text-sm font-bold text-green-800">{requesterData.first_name} {requesterData.last_name}</p>
                   <p className="text-xs text-green-600 font-mono mt-0.5">{requesterData.code} • {requesterData.position || 'Empleado'} • {requesterData.area_name}</p>
                 </div>
-                <button onClick={() => { setRequesterData(null); setRequesterSearchInput(''); }} className="text-green-600 hover:text-green-800 p-1 bg-green-100/50 rounded-full">
+                <button onClick={() => { setRequesterData(null); setRequesterSearchInput(''); }} className="text-green-600 hover:text-green-800 p-1 bg-green-100/50">
                   <X size={16} />
                 </button>
               </div>
@@ -409,7 +409,7 @@ export default function NuevaRequisaView() {
                     <button
                       key={emp.id}
                       onClick={() => { setApproverData(emp); setApproverSearchInput(`${emp.first_name} ${emp.last_name}`); setApproverResults([]); }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors"
+                      className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors"
                     >
                       <p className="text-sm font-semibold text-primary">{emp.first_name} {emp.last_name}</p>
                       <p className="text-[10px] text-gray-400 font-mono italic">{emp.code} • {emp.position || 'Supervisor'}</p>
@@ -420,12 +420,12 @@ export default function NuevaRequisaView() {
             </div>
 
             {approverData && (
-              <div className="bg-blue-50 border border-blue-100 p-4 flex justify-between items-center animate-in zoom-in-95 duration-200">
+              <div className="bg-gray-50 border border-gray-100 p-4 flex justify-between items-center animate-in zoom-in-95 duration-200">
                 <div>
-                  <p className="text-sm font-bold text-blue-800">{approverData.first_name} {approverData.last_name}</p>
-                  <p className="text-xs text-blue-600 font-mono mt-0.5">{approverData.code} • {approverData.position || 'Supervisor'}</p>
+                  <p className="text-sm font-bold text-primary">{approverData.first_name} {approverData.last_name}</p>
+                  <p className="text-xs text-gray-500 font-mono mt-0.5">{approverData.code} • {approverData.position || 'Supervisor'}</p>
                 </div>
-                <button onClick={() => { setApproverData(null); setApproverSearchInput(''); }} className="text-blue-600 hover:text-blue-800 p-1 bg-blue-100/50 rounded-full">
+                <button onClick={() => { setApproverData(null); setApproverSearchInput(''); }} className="text-gray-500 hover:text-primary p-1 bg-gray-100/50">
                   <X size={16} />
                 </button>
               </div>
@@ -435,7 +435,7 @@ export default function NuevaRequisaView() {
           {/* Box: Comentarios */}
           <div className="bg-white border border-gray-100 p-6 shadow-sm">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-3 mb-4">
-              4. Comentarios y Justificación
+              3. Comentarios y Justificación
             </h3>
             <textarea 
               placeholder="Agregue aquí cualquier nota o justificación adicional para esta requisa..."
@@ -450,7 +450,7 @@ export default function NuevaRequisaView() {
         {/* Right Column: Items */}
         <div className="bg-white border border-gray-100 p-6 shadow-sm flex flex-col h-[600px] relative">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-3 mb-4">
-            3. Registro de Artículos
+            4. Registro de Artículos
           </h3>
           
           <div className="relative mb-6">
@@ -482,7 +482,7 @@ export default function NuevaRequisaView() {
                       onClick={() => handleSelectItem(item)}
                       disabled={!hasStock}
                       className={`w-full text-left px-4 py-3 border-b border-gray-100 flex items-center justify-between transition-colors ${
-                        hasStock ? 'hover:bg-blue-50 cursor-pointer' : 'bg-gray-50 opacity-60 cursor-not-allowed'
+                        hasStock ? 'hover:bg-gray-50 cursor-pointer' : 'bg-gray-50 opacity-60 cursor-not-allowed'
                       }`}
                     >
                       <div className="flex flex-col">
@@ -516,7 +516,7 @@ export default function NuevaRequisaView() {
                        <p className="text-sm font-semibold text-primary truncate">{item.inventoryItem.name}</p>
                        <div className="flex items-center gap-2 mt-0.5">
                          <p className="text-[10px] text-gray-400 font-mono tracking-wider">{item.inventoryItem.code}</p>
-                         <span className="text-[10px] text-primary/40 font-bold px-1.5 py-0.5 bg-gray-50 border border-gray-100 rounded">
+                         <span className="text-[10px] text-primary/40 font-bold px-1.5 py-0.5 bg-gray-50 border border-gray-100">
                            INV: {availableStock}
                          </span>
                        </div>

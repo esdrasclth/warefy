@@ -151,9 +151,9 @@ export default function NuevaCompraView() {
   };
 
   return (
-    <div className="space-y-8 pb-20 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-100 pb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
           <Link href="/compras" className="p-2 border border-gray-200 text-gray-500 hover:text-primary hover:border-primary transition-colors bg-white">
             <ArrowLeft size={20} />
@@ -166,7 +166,7 @@ export default function NuevaCompraView() {
         
         <button 
           onClick={handleSubmit} disabled={isSaving || selectedItems.length === 0 || !selectedSupplier}
-          className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 text-sm font-semibold hover:bg-blue-700 transition-all shadow-sm border border-transparent disabled:opacity-50"
+          className="flex items-center gap-2 bg-primary text-background px-6 py-3 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent disabled:opacity-50"
         >
           {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
           Guardar Compra
@@ -184,7 +184,7 @@ export default function NuevaCompraView() {
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">1. Proveedor</h3>
               <button 
                 onClick={() => setShowNewSupplierModal(true)}
-                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 uppercase tracking-tighter"
+                className="text-[10px] font-bold text-primary hover:text-primary-dark flex items-center gap-1 uppercase tracking-tighter"
               >
                 <UserPlus size={12} /> Nuevo
               </button>
@@ -192,7 +192,7 @@ export default function NuevaCompraView() {
             
             <div className="relative">
               {!selectedSupplier ? (
-                <div className="flex items-center bg-gray-50 border border-gray-200 group focus-within:border-blue-500 transition-colors">
+                <div className="flex items-center bg-gray-50 border border-gray-200 group focus-within:border-primary transition-colors">
                   <div className="pl-3 pr-2 text-gray-400">
                     <Building2 size={18} />
                   </div>
@@ -205,12 +205,12 @@ export default function NuevaCompraView() {
                   />
                 </div>
               ) : (
-                <div className="bg-blue-50 border border-blue-100 p-4 flex justify-between items-center rounded">
+                <div className="bg-gray-50 border border-gray-100 p-4 flex justify-between items-center">
                   <div>
-                    <p className="text-sm font-bold text-blue-800">{selectedSupplier.name}</p>
-                    <p className="text-[10px] text-blue-600 font-mono italic">{selectedSupplier.tax_id || 'Sin RTN/ID'}</p>
+                    <p className="text-sm font-bold text-primary">{selectedSupplier.name}</p>
+                    <p className="text-[10px] text-gray-500 font-mono italic">{selectedSupplier.tax_id || 'Sin RTN/ID'}</p>
                   </div>
-                  <button onClick={() => setSelectedSupplier(null)} className="text-blue-600 hover:text-blue-800 p-1 bg-blue-100/50 rounded-full">
+                  <button onClick={() => setSelectedSupplier(null)} className="text-gray-500 hover:text-primary p-1 bg-gray-100/50">
                     <X size={16} />
                   </button>
                 </div>
@@ -242,7 +242,7 @@ export default function NuevaCompraView() {
               placeholder="Ej: TAL-9988"
               value={manualRequisitionNumber}
               onChange={e => setManualRequisitionNumber(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 focus:bg-white focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 focus:bg-white focus:outline-none focus:border-primary"
             />
             <p className="text-[10px] text-gray-400 mt-2 italic italic">Este número se visualizará en el listado para seguimiento.</p>
           </div>
@@ -254,7 +254,7 @@ export default function NuevaCompraView() {
               placeholder="Notas internas sobra la compra..."
               value={comments}
               onChange={e => setComments(e.target.value)}
-              className="w-full h-32 p-3 text-sm bg-gray-50 border border-gray-200 focus:bg-white focus:outline-none focus:border-blue-500 resize-none"
+              className="w-full h-32 p-3 text-sm bg-gray-50 border border-gray-200 focus:bg-white focus:outline-none focus:border-primary resize-none"
             />
           </div>
 
@@ -268,7 +268,7 @@ export default function NuevaCompraView() {
             </h3>
 
             <div className="relative mb-6">
-              <div className="flex gap-2 bg-gray-50 border border-gray-200 focus-within:border-blue-500 transition-colors">
+              <div className="flex gap-2 bg-gray-50 border border-gray-200 focus-within:border-primary transition-colors">
                 <div className="pl-3 flex items-center text-gray-400">
                   <Search size={18} />
                 </div>
@@ -314,7 +314,7 @@ export default function NuevaCompraView() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {selectedItems.map((item) => (
-                    <tr key={item.inventoryItem.id} className="group transition-colors hover:bg-blue-50/30">
+                    <tr key={item.inventoryItem.id} className="group transition-colors hover:bg-blue-50/20">
                       <td className="py-4">
                         <p className="text-sm font-semibold text-primary">{item.inventoryItem.name}</p>
                         <p className="text-[10px] text-gray-400 font-mono">{item.inventoryItem.code}</p>
@@ -324,11 +324,11 @@ export default function NuevaCompraView() {
                           type="number"
                           value={item.quantity || ""}
                           onChange={(e) => handleUpdateItem(item.inventoryItem.id, 'quantity', e.target.value)}
-                          className="w-20 mx-auto block border border-gray-200 p-1.5 text-sm text-center focus:border-blue-500 outline-none"
+                          className="w-20 mx-auto block border border-gray-200 p-1.5 text-sm text-center focus:border-primary outline-none"
                         />
                       </td>
                       <td className="py-4 px-2">
-                        <div className="flex items-center gap-1 border border-gray-200 p-1.5 bg-white focus-within:border-blue-500">
+                        <div className="flex items-center gap-1 border border-gray-200 p-1.5 bg-white focus-within:border-primary">
                           <span className="text-xs text-gray-400">$</span>
                           <input 
                             type="number"
@@ -369,7 +369,7 @@ export default function NuevaCompraView() {
                 </div>
                 <div className="flex justify-between w-64 text-xl font-bold text-primary">
                   <span>TOTAL USD:</span>
-                  <span className="text-blue-700">${selectedItems.reduce((acc, curr) => acc + (curr.quantity * curr.unitCost), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <span className="text-primary">${selectedItems.reduce((acc, curr) => acc + (curr.quantity * curr.unitCost), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
             )}
@@ -410,15 +410,15 @@ function SupplierModal({ onClose, onCreated }: { onClose: () => void, onCreated:
   };
 
   return (
-    <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <div className="bg-white p-8 border border-gray-100 shadow-2xl w-full max-w-md animate-in zoom-in-95 duration-200">
+      <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <div className="bg-white border border-gray-100 shadow-sm p-6 w-full max-w-md animate-in zoom-in-95 duration-200">
         <h2 className="text-2xl font-light text-primary mb-6">Nuevo Proveedor</h2>
         <div className="space-y-4">
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Nombre Completo</label>
             <input 
               type="text" value={name} onChange={e => setName(e.target.value)}
-              className="w-full border border-gray-200 p-3 text-sm focus:border-blue-500 outline-none"
+              className="w-full border border-gray-200 p-3 text-sm focus:border-primary outline-none"
               placeholder="Ej. Suministros Industriales S.A."
             />
           </div>
@@ -426,7 +426,7 @@ function SupplierModal({ onClose, onCreated }: { onClose: () => void, onCreated:
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">RTN / ID Fiscal</label>
             <input 
               type="text" value={taxId} onChange={e => setTaxId(e.target.value)}
-              className="w-full border border-gray-200 p-3 text-sm focus:border-blue-500 outline-none"
+              className="w-full border border-gray-200 p-3 text-sm focus:border-primary outline-none"
               placeholder="0801-1999-XXXXXX"
             />
           </div>
@@ -434,7 +434,7 @@ function SupplierModal({ onClose, onCreated }: { onClose: () => void, onCreated:
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Email Contacto</label>
             <input 
               type="email" value={email} onChange={e => setEmail(e.target.value)}
-              className="w-full border border-gray-200 p-3 text-sm focus:border-blue-500 outline-none"
+              className="w-full border border-gray-200 p-3 text-sm focus:border-primary outline-none"
               placeholder="ventas@proveedor.com"
             />
           </div>

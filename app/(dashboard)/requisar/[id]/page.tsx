@@ -80,9 +80,8 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-        <Loader2 className="animate-spin text-primary" size={48} />
-        <p className="text-gray-500 font-medium">Cargando detalles de la requisa...</p>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="animate-spin text-primary" size={32} />
       </div>
     );
   }
@@ -92,7 +91,9 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
         <FileText className="text-gray-300" size={64} />
         <h2 className="text-2xl font-light text-primary">Requisa no encontrada</h2>
-        <Link href="/requisar" className="text-blue-500 hover:underline">Volver al listado</Link>
+        <Link href="/requisar" className="flex items-center gap-2 bg-primary text-background px-5 py-3 text-sm font-semibold hover:bg-primary-dark transition-all">
+          <ArrowLeft size={16} /> Volver al listado
+        </Link>
       </div>
     );
   }
@@ -116,15 +117,16 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
 
   const getStatusBadge = (status: string) => {
     switch(status) {
-      case 'ENTREGADA': return <span className="bg-green-100 text-green-700 border border-green-200 px-3 py-1 font-bold tracking-widest uppercase text-xs">Entregada</span>;
-      case 'CANCELADA': return <span className="bg-red-100 text-red-700 border border-red-200 px-3 py-1 font-bold tracking-widest uppercase text-xs">Cancelada</span>;
-      case 'PENDIENTE': return <span className="bg-yellow-100 text-yellow-700 border border-yellow-200 px-3 py-1 font-bold tracking-widest uppercase text-xs animate-pulse">Pendiente</span>;
-      default: return <span className="bg-gray-100 text-gray-700 border border-gray-200 px-3 py-1 font-bold tracking-widest uppercase text-xs">{status}</span>;
+      case 'ENTREGADA': return <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border text-green-600 border-green-200 bg-green-50">Entregada</span>;
+      case 'CANCELADA': return <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border text-red-500 border-red-200 bg-red-50">Cancelada</span>;
+      case 'PENDIENTE': return <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border text-blue-600 border-blue-200 bg-blue-50">Pendiente</span>;
+      case 'PENDIENTE DE APROBACION': return <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border text-orange-600 border-orange-200 bg-orange-50">Pend. Aprobación</span>;
+      default: return <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border text-gray-300 border-gray-100 bg-gray-50">{status}</span>;
     }
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 print:space-y-4 pb-12 print:pb-0 animate-in fade-in duration-500">
+    <div className="max-w-4xl mx-auto space-y-8 print:space-y-4 pb-12 print:pb-0 animate-in fade-in duration-500">
       <style type="text/css" media="print">
         {`
           @page { size: 8.5in 5.5in landscape; margin: 0.2in; } /* Statement / Half-Letter Landscape */
@@ -181,7 +183,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
       {/* Info Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 print:gap-3">
         {/* Requester Info */}
-        <div className="bg-white border text-left border-gray-100 p-6 print:p-2 shadow-sm print:shadow-none flex flex-col justify-center print:border-none">
+        <div className="bg-white border border-gray-100 p-6 print:p-2 shadow-sm print:shadow-none flex flex-col justify-center print:border-none">
             <h3 className="text-[10px] print:text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4 print:mb-1 border-b border-gray-50 pb-2 print:pb-1">Información de Solicitud</h3>
             <div className="space-y-3 print:space-y-1">
               <div>
@@ -201,7 +203,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
         </div>
 
         {/* Approver Info */}
-        <div className="bg-white border text-left border-gray-100 p-6 print:p-2 shadow-sm print:shadow-none flex flex-col justify-center print:border-none">
+        <div className="bg-white border border-gray-100 p-6 print:p-2 shadow-sm print:shadow-none flex flex-col justify-center print:border-none">
             <h3 className="text-[10px] print:text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4 print:mb-1 border-b border-gray-50 pb-2 print:pb-1">Aprobación y Costos</h3>
             <div className="space-y-3 print:space-y-1">
               <div>
@@ -225,7 +227,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
 
       {/* Comments Section */}
       {requisition.comments && (
-        <div className="bg-white border border-gray-100 p-6 print:p-2 shadow-sm print:shadow-none text-left">
+        <div className="bg-white border border-gray-100 p-6 print:p-2 shadow-sm print:shadow-none">
           <h3 className="text-[10px] print:text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-3 print:mb-1 border-b border-gray-50 pb-2 print:pb-1">Comentarios y Justificación</h3>
           <p className="text-sm print:text-[9px] text-gray-700 italic leading-relaxed whitespace-pre-wrap">
             "{requisition.comments}"
@@ -235,15 +237,14 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
 
       {/* Items Table */}
       <div className="bg-white border border-gray-100 shadow-sm print:shadow-none overflow-hidden print:overflow-visible">
-        <div className="bg-gray-50 border-b border-gray-100 print:border-none p-4 print:p-2 flex items-center gap-2 print:gap-1 print:bg-transparent">
-            <Package size={18} className="text-gray-500 print:hidden" />
-            <h3 className="text-sm print:text-[9px] font-bold text-gray-700 uppercase tracking-widest">Detalle de Artículos ({requisition.requisition_items?.length || 0})</h3>
+        <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20 print:bg-transparent print:border-none print:px-2 print:py-2">
+            <h2 className="text-xs font-bold text-white uppercase tracking-widest print:text-gray-700 print:text-[9px]">Detalle de Artículos ({requisition.requisition_items?.length || 0})</h2>
         </div>
         
         <div className="overflow-x-auto print:overflow-visible">
           <table className="w-full text-left whitespace-nowrap">
             <thead>
-              <tr className="bg-white text-[10px] print:text-[9px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
+              <tr className="bg-gray-50 border-b border-gray-100 text-[9px] print:text-[9px] font-bold text-primary/70 uppercase tracking-tighter">
                 <th className="px-6 print:px-2 py-4 print:py-2">Código</th>
                 <th className="px-6 print:px-2 py-4 print:py-2">Artículo</th>
                 <th className="px-6 print:px-2 py-4 print:py-2 text-center">Unidad</th>
@@ -279,7 +280,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
                               const val = Math.max(0, Math.min(item.quantity, parseInt(e.target.value) || 0));
                               setDeliveredQuantities({...deliveredQuantities, [item.id]: val});
                             }}
-                            className="w-20 border border-gray-300 rounded px-2 py-1 text-right focus:outline-none focus:border-primary print:hidden"
+                            className="w-20 border border-gray-300 px-2 py-1 text-right focus:outline-none focus:border-primary print:hidden"
                           />
                           <span className="hidden print:inline">{effectiveQty}</span>
                         </>

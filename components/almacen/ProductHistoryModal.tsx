@@ -1,19 +1,54 @@
-import { X, Calendar, User, Building } from 'lucide-react';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { X, Calendar, User, Building, Loader2 } from 'lucide-react';
+import { supabase } from '@/utils/supabase/client';
+import type { InventoryItem } from '@/types';
 
 interface ProductHistoryModalProps {
-  product: any | null;
+  product: InventoryItem | null;
   onClose: () => void;
 }
 
 export default function ProductHistoryModal({ product, onClose }: ProductHistoryModalProps) {
   if (!product) return null;
 
-  // Dummy requisition history
-  const history = [
-    { reqId: 'REQ-2023-112', area: 'Ventas', date: '10 Nov 2026', requester: 'María López', quantity: 2 },
-    { reqId: 'REQ-2023-085', area: 'Contabilidad', date: '05 Nov 2026', requester: 'Juan Pérez', quantity: 5 },
-    { reqId: 'REQ-2023-042', area: 'Recursos Humanos', date: '28 Oct 2026', requester: 'Ana Gómez', quantity: 10 },
-  ];
+  const [history, setHistory] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('requisition_items')
+        .select(`
+          id,
+          quantity,
+          delivered_quantity,
+          requisitions (
+            id,
+            consecutive,
+            created_at,
+            requester_name,
+            area_name,
+            status
+          )
+        `)
+        .eq('inventory_item_id', product.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error('Error fetching product history:', error);
+        setHistory([]);
+      } else {
+        setHistory(data || []);
+      }
+      setIsLoading(false);
+    };
+
+    fetchHistory();
+  }, [product.id]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary-dark/40 backdrop-blur-sm transition-opacity p-4">
@@ -30,45 +65,55 @@ export default function ProductHistoryModal({ product, onClose }: ProductHistory
         </div>
 
         <div className="p-8 bg-gray-50/50">
-          {history.length > 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center min-h-[200px]">
+              <Loader2 size={28} className="animate-spin text-primary" />
+            </div>
+          ) : history.length > 0 ? (
             <div className="bg-white border border-gray-100 shadow-sm overflow-hidden">
               <table className="w-full text-left whitespace-nowrap">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                    <th className="px-6 py-4">Requisa ID</th>
-                    <th className="px-6 py-4">Área</th>
-                    <th className="px-6 py-4">Solicitante</th>
-                    <th className="px-6 py-4">Fecha</th>
-                    <th className="px-6 py-4 text-right">Cant. Solicitada</th>
+                  <tr className="bg-gray-50 border-b border-gray-100 text-[9px] font-bold text-primary/70 uppercase tracking-tighter">
+                    <th className="px-6 py-3">Requisa</th>
+                    <th className="px-6 py-3">Área</th>
+                    <th className="px-6 py-3">Solicitante</th>
+                    <th className="px-6 py-3">Fecha</th>
+                    <th className="px-6 py-3 text-right">Cant. Solicitada</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {history.map((record, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50/80 transition-colors group">
-                      <td className="px-6 py-4 text-sm font-semibold text-primary">{record.reqId}</td>
+                  {history.map((record, idx) => {
+                    const req = record.requisitions;
+                    const dateStr = req?.created_at ? new Date(req.created_at).toLocaleDateString('es-HN') : '—';
+                    const qty = record.delivered_quantity ?? record.quantity;
+                    return (
+                    <tr key={record.id || idx} className="hover:bg-gray-50/80 transition-colors group">
+                      <td className="px-6 py-4 text-sm font-semibold text-primary">
+                        {req?.consecutive ? `REQ-${String(req.consecutive).padStart(6, '0')}` : '—'}
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-600 group-hover:text-primary transition-colors">
                         <div className="flex items-center gap-2">
                            <Building size={14} className="text-gray-400" />
-                          {record.area}
+                          {req?.area_name || '—'}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         <div className="flex items-center gap-2">
                            <User size={14} className="text-gray-400" />
-                          {record.requester}
+                          {req?.requester_name || '—'}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                          <div className="flex items-center gap-2">
                            <Calendar size={14} className="text-gray-400" />
-                           {record.date}
+                           {dateStr}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-right font-bold text-primary">
-                        {record.quantity} <span className="text-xs text-gray-400 font-normal">un.</span>
+                        {qty} <span className="text-xs text-gray-400 font-normal">un.</span>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>

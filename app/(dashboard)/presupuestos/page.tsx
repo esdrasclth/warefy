@@ -94,7 +94,7 @@ export default function PresupuestosPage() {
       </div>
 
       {isLoading && (
-        <div className="flex justify-center p-12">
+        <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 size={32} className="animate-spin text-primary" />
         </div>
       )}
@@ -125,7 +125,7 @@ export default function PresupuestosPage() {
                   placeholder="Buscar área..." 
                   value={areaSearch}
                   onChange={e => setAreaSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-white/10 border border-white/20 rounded focus:outline-none focus:border-white/40 transition-colors text-white placeholder-white/50"
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-white/10 border border-white/20 focus:outline-none focus:border-white/40 transition-colors text-white placeholder-white/50"
                 />
               </div>
             </div>
@@ -133,9 +133,9 @@ export default function PresupuestosPage() {
             <div className="p-0 overflow-y-auto max-h-[600px]">
               <table className="w-full text-left whitespace-nowrap">
                 <thead className="sticky top-0 bg-gray-50 border-b border-gray-100 z-10 shadow-sm">
-                  <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                    <th className="px-6 py-4">Área Organizacional</th>
-                    <th className="px-6 py-4 text-right">Tope USD Mensual</th>
+                  <tr className="text-[9px] font-bold text-primary/70 uppercase tracking-tighter">
+                    <th className="px-6 py-3">Área Organizacional</th>
+                    <th className="px-6 py-3 text-right">Tope USD Mensual</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -153,16 +153,17 @@ export default function PresupuestosPage() {
                             step="0.01"
                             value={areaBudgets[area.id] || ''}
                             onChange={(e) => setAreaBudgets({ ...areaBudgets, [area.id]: parseFloat(e.target.value) || 0 })}
-                            className="w-28 border border-gray-200 rounded px-3 py-1.5 text-right text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all font-semibold"
+                            className="w-28 bg-gray-50 border border-gray-200 px-3 py-1.5 text-right text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-semibold"
                             placeholder="0.00"
                           />
                           <button 
                             onClick={() => saveAreaBudget(area.id)}
                             disabled={savingArea === area.id}
-                            className={`p-2 rounded transition-colors ${savingArea === area.id ? 'bg-gray-100 text-gray-400' : 'bg-gray-50 text-primary hover:bg-primary/10'}`}
+                            className={`flex items-center gap-2 px-3 py-1 text-xs font-bold transition-colors ${savingArea === area.id ? 'bg-gray-100 text-gray-400' : 'bg-primary text-white hover:bg-primary-dark'}`}
                             title="Guardar Presupuesto"
                           >
-                            {savingArea === area.id ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                            {savingArea === area.id ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                            Guardar
                           </button>
                         </div>
                       </td>
@@ -197,7 +198,7 @@ export default function PresupuestosPage() {
                   placeholder="Buscar producto por nombre o código..." 
                   value={productSearch}
                   onChange={e => setProductSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-white/10 border border-white/20 rounded focus:outline-none focus:border-white/40 transition-colors text-white placeholder-white/50"
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-white/10 border border-white/20 focus:outline-none focus:border-white/40 transition-colors text-white placeholder-white/50"
                 />
               </div>
             </div>
@@ -205,9 +206,9 @@ export default function PresupuestosPage() {
             <div className="p-0 overflow-y-auto max-h-[600px]">
               <table className="w-full text-left whitespace-nowrap">
                 <thead className="sticky top-0 bg-gray-50 border-b border-gray-100 z-10 shadow-sm">
-                  <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                    <th className="px-6 py-4">Artículo de Inventario</th>
-                    <th className="px-6 py-4 text-right">Límite (Unds)</th>
+                  <tr className="text-[9px] font-bold text-primary/70 uppercase tracking-tighter">
+                    <th className="px-6 py-3">Artículo de Inventario</th>
+                    <th className="px-6 py-3 text-right">Límite (Unds)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -227,16 +228,17 @@ export default function PresupuestosPage() {
                             step="1"
                             value={productLimits[prod.id] || ''}
                             onChange={(e) => setProductLimits({ ...productLimits, [prod.id]: parseInt(e.target.value) || 0 })}
-                            className="w-24 border border-gray-200 rounded px-3 py-1.5 text-right text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all font-semibold"
+                            className="w-24 bg-gray-50 border border-gray-200 px-3 py-1.5 text-right text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-semibold"
                             placeholder="0"
                           />
                           <button 
                             onClick={() => saveProductLimit(prod.id)}
                             disabled={savingProduct === prod.id}
-                            className={`p-2 rounded transition-colors ${savingProduct === prod.id ? 'bg-gray-100 text-gray-400' : 'bg-gray-50 text-primary hover:bg-primary/10'}`}
+                            className={`flex items-center gap-2 px-3 py-1 text-xs font-bold transition-colors ${savingProduct === prod.id ? 'bg-gray-100 text-gray-400' : 'bg-primary text-white hover:bg-primary-dark'}`}
                             title="Guardar Límite"
                           >
-                            {savingProduct === prod.id ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                            {savingProduct === prod.id ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                            Guardar
                           </button>
                         </div>
                       </td>

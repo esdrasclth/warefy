@@ -115,16 +115,15 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
   };
 
   if (isLoading) return (
-    <div className="flex flex-col items-center justify-center p-24 text-gray-400">
-      <Loader2 size={48} className="animate-spin mb-4" />
-      <p className="animate-pulse">Cargando información de compra...</p>
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <Loader2 size={32} className="animate-spin text-primary" />
     </div>
   );
 
   if (!purchase) return <div className="p-12 text-center text-red-500">Compra no encontrada.</div>;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto pb-20">
+    <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto pb-12">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
@@ -132,7 +131,7 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-primary tracking-tight">COM-{String(purchase.consecutive).padStart(6, '0')}</h1>
+            <h1 className="text-3xl font-light text-primary tracking-tight">COM-{String(purchase.consecutive).padStart(6, '0')}</h1>
             <p className="text-gray-500 text-xs font-mono">{purchase.id}</p>
           </div>
         </div>
@@ -145,7 +144,7 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
               <Check size={18} /> Confirmar Recepción
             </button>
           )}
-          <button className="flex items-center gap-2 bg-white text-gray-600 px-5 py-2.5 text-sm font-semibold border border-gray-200 hover:bg-gray-50 transition-all shadow-sm">
+          <button className="flex items-center gap-2 bg-white text-primary px-5 py-2.5 text-sm font-semibold border border-gray-200 hover:bg-gray-50 transition-all shadow-sm">
             <Printer size={18} /> Imprimir
           </button>
         </div>
@@ -160,7 +159,7 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
            </div>
            <p className="text-lg font-bold text-primary">{purchase.suppliers?.name}</p>
            <p className="text-sm text-gray-500 mt-1">{purchase.suppliers?.tax_id || 'ID no registrado'}</p>
-           <p className="text-xs text-blue-600 mt-2 hover:underline cursor-pointer">{purchase.suppliers?.email}</p>
+           <p className="text-xs text-gray-500 mt-2">{purchase.suppliers?.email}</p>
         </div>
 
         {/* Info Card: Date/Status */}
@@ -185,12 +184,12 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
            </div>
            {purchase.requisitions ? (
              <>
-               <p className="text-lg font-bold text-blue-600">REQ-{String(purchase.requisitions.consecutive).padStart(6, '0')}</p>
+               <p className="text-lg font-bold text-primary">REQ-{String(purchase.requisitions.consecutive).padStart(6, '0')}</p>
                <p className="text-[10px] text-gray-400 font-mono mt-1">Ref: {purchase.requisitions.id.split('-')[0]}...</p>
              </>
            ) : purchase.manual_requisition_number ? (
              <>
-               <p className="text-lg font-bold text-orange-600 uppercase">{purchase.manual_requisition_number}</p>
+               <p className="text-lg font-bold text-primary uppercase">{purchase.manual_requisition_number}</p>
                <p className="text-[10px] text-gray-400 font-mono mt-1">Referencia Manual</p>
              </>
            ) : (
@@ -199,12 +198,12 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
         </div>
 
         {/* Info Card: Total */}
-        <div className="bg-white border border-gray-100 p-6 shadow-sm border-r-4 border-r-blue-600 flex flex-col justify-center">
+        <div className="bg-white border border-gray-100 p-6 shadow-sm border-l-4 border-l-primary flex flex-col justify-center">
            <div className="flex items-center gap-2 text-gray-400 mb-2">
               <ShoppingCart size={16} />
               <span className="text-[10px] font-bold uppercase tracking-widest">Gasto Total</span>
            </div>
-           <p className="text-3xl font-light text-blue-800 tracking-tighter">
+           <p className="text-3xl font-light text-primary tracking-tighter">
              ${(purchase.status === 'PENDIENTE' 
                ? Object.entries(receivedQuantities).reduce((acc, [id, qty]) => {
                    const item = purchase.purchase_items.find((pi: any) => pi.id === id);
@@ -218,20 +217,20 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
 
       {/* Items Table */}
       <div className="bg-white border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Desglose de Artículos</h3>
+        <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
+          <h2 className="text-xs font-bold text-white uppercase tracking-widest">Desglose de Artículos</h2>
           {purchase.status === 'PENDIENTE' && (
             <span className="text-[9px] bg-orange-100 text-orange-600 px-2 py-0.5 font-bold uppercase tracking-tighter">Ajusta las cantidades recibidas abajo</span>
           )}
         </div>
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-white">
-              <th className="py-4 px-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Producto</th>
-              <th className="py-4 px-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Solicitada</th>
-              <th className="py-4 px-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Recibida</th>
-              <th className="py-4 px-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Costo Unit.</th>
-              <th className="py-4 px-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Subtotal</th>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <th className="py-2 px-6 text-[9px] font-bold text-primary/70 uppercase tracking-tighter">Producto</th>
+              <th className="py-2 px-6 text-[9px] font-bold text-primary/70 uppercase tracking-tighter text-center">Solicitada</th>
+              <th className="py-2 px-6 text-[9px] font-bold text-primary/70 uppercase tracking-tighter text-center">Recibida</th>
+              <th className="py-2 px-6 text-[9px] font-bold text-primary/70 uppercase tracking-tighter text-right">Costo Unit.</th>
+              <th className="py-2 px-6 text-[9px] font-bold text-primary/70 uppercase tracking-tighter text-right">Subtotal</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -251,14 +250,14 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
                       min="0"
                       value={receivedQuantities[item.id] ?? (item.received_quantity ?? item.quantity)}
                       onChange={(e) => handleUpdateQty(item.id, e.target.value)}
-                      className="w-20 border border-blue-200 bg-white p-1 text-center focus:border-blue-500 outline-none text-blue-700"
+                      className="w-20 border border-gray-200 bg-white p-1 text-center focus:outline-none focus:border-primary text-primary"
                     />
                   ) : (
                     item.received_quantity ?? item.quantity
                   )}
                 </td>
                 <td className="py-4 px-6 text-sm text-right text-gray-500">${item.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                <td className="py-4 px-6 text-sm text-right font-bold text-blue-700">
+                <td className="py-4 px-6 text-sm text-right font-bold text-primary">
                   ${((receivedQuantities[item.id] ?? (item.received_quantity ?? item.quantity)) * item.unit_cost).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </td>
               </tr>
@@ -269,11 +268,11 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
 
       {/* Comments Area */}
       {purchase.comments && (
-        <div className="bg-blue-50/50 border border-blue-100 p-6 flex gap-4 ring-1 ring-white">
-          <MessageSquare className="text-blue-400 shrink-0" size={24} />
+        <div className="bg-gray-50 border border-gray-100 p-6 flex gap-4">
+          <MessageSquare className="text-gray-400 shrink-0" size={20} />
           <div>
-             <h4 className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-2">Notas del Registro</h4>
-             <p className="text-sm text-blue-900 leading-relaxed italic">"{purchase.comments}"</p>
+             <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Notas del Registro</h4>
+             <p className="text-sm text-gray-700 leading-relaxed italic">"{purchase.comments}"</p>
           </div>
         </div>
       )}
