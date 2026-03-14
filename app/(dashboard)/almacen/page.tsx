@@ -74,6 +74,28 @@ export default function AlmacenPage() {
 
   useEffect(() => {
     fetchItems();
+
+    const channel = supabase
+      .channel('almacen-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'inventory_items' },
+        () => {
+          fetchItems();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'requisition_items' },
+        () => {
+          fetchItems();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleDelete = async (idToDelete: string) => {

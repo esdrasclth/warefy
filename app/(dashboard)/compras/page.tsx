@@ -36,6 +36,21 @@ export default function ComprasPage() {
 
   useEffect(() => {
     fetchPurchases();
+
+    const channel = supabase
+      .channel('compras-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'purchases' },
+        () => {
+          fetchPurchases();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleDelete = async (id: string) => {

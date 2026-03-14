@@ -131,6 +131,21 @@ export default function RequisarPage() {
 
   useEffect(() => {
     fetchProfileAndRequisitions();
+
+    const channel = supabase
+      .channel('requisitions-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'requisitions' },
+        () => {
+          fetchProfileAndRequisitions();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleDelete = async (id: string) => {
