@@ -78,7 +78,7 @@ export default function ProductHistoryPage() {
         console.error('Error fetching product history:', historyRes.error);
         setHistory([]);
       } else {
-        setHistory((historyRes.data || []) as HistoryRecord[]);
+        setHistory((historyRes.data || []) as unknown as HistoryRecord[]);
       }
 
       setIsLoading(false);

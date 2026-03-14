@@ -75,7 +75,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
   }, [isLoading, requisition, searchParams]);
 
   const updateStatus = async (newStatus: 'ENTREGADA' | 'CANCELADA') => {
-    if (confirm(¿Estás seguro de marcar esta requisa como ?)) {
+    if (confirm(`¿Estás seguro de marcar esta requisa como ${newStatus}?`)) {
       setIsLoading(true);
       try {
         const response = await fetch('/api/requisitions/update-status', {
@@ -142,7 +142,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
       case 'ENTREGADA': return <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border text-green-600 border-green-200 bg-green-50">Entregada</span>;
       case 'CANCELADA': return <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border text-red-500 border-red-200 bg-red-50">Cancelada</span>;
       case 'PENDIENTE': return <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border text-blue-600 border-blue-200 bg-blue-50">Pendiente</span>;
-      case 'PENDIENTE DE APROBACION': return <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border text-orange-600 border-orange-200 bg-orange-50">Pend. Aprobación</span>;
+      case 'PENDIENTE DE APROBACION': return <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border text-orange-600 border-orange-200 bg-orange-50">Pend. AprobaciÃ³n</span>;
       default: return <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border text-gray-300 border-gray-100 bg-gray-50">{status}</span>;
     }
   };
@@ -210,7 +210,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
       <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 print:gap-3">
         {/* Requester Info */}
         <div className="bg-white border border-gray-100 p-6 print:p-2 shadow-sm print:shadow-none flex flex-col justify-center print:border-none">
-            <h3 className="text-[10px] print:text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4 print:mb-1 border-b border-gray-50 pb-2 print:pb-1">Información de Solicitud</h3>
+            <h3 className="text-[10px] print:text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4 print:mb-1 border-b border-gray-50 pb-2 print:pb-1">InformaciÃ³n de Solicitud</h3>
             <div className="space-y-3 print:space-y-1">
               <div>
                 <p className="text-xs print:text-[8px] text-gray-400 uppercase leading-none">Solicitante</p>
@@ -218,11 +218,11 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
                 <p className="text-xs print:text-[8px] text-gray-500 font-mono mt-0.5 leading-none">{requisition.requester_code || '---'}</p>
               </div>
               <div>
-                <p className="text-xs print:text-[8px] text-gray-400 uppercase leading-none">Área Destino</p>
+                <p className="text-xs print:text-[8px] text-gray-400 uppercase leading-none">Ãrea Destino</p>
                 <p className="font-semibold text-primary print:text-[10px] leading-tight mt-0.5">{requisition.area_name || 'N/A'}</p>
               </div>
               <div>
-                <p className="text-xs print:text-[8px] text-gray-400 uppercase leading-none">Fecha de Emisión</p>
+                <p className="text-xs print:text-[8px] text-gray-400 uppercase leading-none">Fecha de EmisiÃ³n</p>
                 <p className="text-sm print:text-[10px] font-medium text-gray-800 leading-tight mt-0.5">{dateStr}</p>
               </div>
             </div>
@@ -230,16 +230,16 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
 
         {/* Approver Info */}
         <div className="bg-white border border-gray-100 p-6 print:p-2 shadow-sm print:shadow-none flex flex-col justify-center print:border-none">
-            <h3 className="text-[10px] print:text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4 print:mb-1 border-b border-gray-50 pb-2 print:pb-1">Aprobación y Costos</h3>
+            <h3 className="text-[10px] print:text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4 print:mb-1 border-b border-gray-50 pb-2 print:pb-1">AprobaciÃ³n y Costos</h3>
             <div className="space-y-3 print:space-y-1">
               <div>
                 <p className="text-xs print:text-[8px] text-gray-400 uppercase leading-none">Autorizado Por</p>
-                <p className="font-semibold text-primary print:text-[10px] leading-tight mt-0.5">{requisition.approver_name || 'Revisión Pendiente'}</p>
+                <p className="font-semibold text-primary print:text-[10px] leading-tight mt-0.5">{requisition.approver_name || 'RevisiÃ³n Pendiente'}</p>
                 <p className="text-xs print:text-[8px] text-gray-500 font-mono mt-0.5 leading-none">{requisition.approver_code || '---'}</p>
               </div>
               <div className="flex gap-8 print:gap-4 print:mt-1">
                  <div>
-                  <p className="text-xs print:text-[8px] text-gray-400 uppercase leading-none">Total de Ítems Físicos</p>
+                  <p className="text-xs print:text-[8px] text-gray-400 uppercase leading-none">Total de Ãtems FÃ­sicos</p>
                   <p className="text-2xl print:text-sm font-light text-primary leading-tight mt-0.5">{effectiveTotalItems}</p>
                  </div>
                  <div>
@@ -254,7 +254,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
       {/* Comments Section */}
       {requisition.comments && (
         <div className="bg-white border border-gray-100 p-6 print:p-2 shadow-sm print:shadow-none">
-          <h3 className="text-[10px] print:text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-3 print:mb-1 border-b border-gray-50 pb-2 print:pb-1">Comentarios y Justificación</h3>
+          <h3 className="text-[10px] print:text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-3 print:mb-1 border-b border-gray-50 pb-2 print:pb-1">Comentarios y JustificaciÃ³n</h3>
           <p className="text-sm print:text-[9px] text-gray-700 italic leading-relaxed whitespace-pre-wrap">
             "{requisition.comments}"
           </p>
@@ -264,15 +264,15 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
       {/* Items Table */}
       <div className="bg-white border border-gray-100 shadow-sm print:shadow-none overflow-hidden print:overflow-visible">
         <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20 print:bg-transparent print:border-none print:px-2 print:py-2">
-            <h2 className="text-xs font-bold text-white uppercase tracking-widest print:text-gray-700 print:text-[9px]">Detalle de Artículos ({requisition.requisition_items?.length || 0})</h2>
+            <h2 className="text-xs font-bold text-white uppercase tracking-widest print:text-gray-700 print:text-[9px]">Detalle de ArtÃ­culos ({requisition.requisition_items?.length || 0})</h2>
         </div>
         
         <div className="overflow-x-auto print:overflow-visible">
           <table className="w-full text-left whitespace-nowrap">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-[9px] print:text-[9px] font-bold text-primary/70 uppercase tracking-tighter">
-                <th className="px-6 print:px-2 py-4 print:py-2">Código</th>
-                <th className="px-6 print:px-2 py-4 print:py-2">Artículo</th>
+                <th className="px-6 print:px-2 py-4 print:py-2">CÃ³digo</th>
+                <th className="px-6 print:px-2 py-4 print:py-2">ArtÃ­culo</th>
                 <th className="px-6 print:px-2 py-4 print:py-2 text-center">Unidad</th>
                 <th className="px-6 print:px-2 py-4 print:py-2 text-right">Cant. Req.</th>
                 <th className="px-6 print:px-2 py-4 print:py-2 text-right">{requisition.status === 'PENDIENTE' ? 'A Entregar' : 'Entregado'}</th>
@@ -291,7 +291,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
                 return (
                   <tr key={item.id || idx} className="hover:bg-gray-50/50 transition-colors group">
                     <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs font-mono text-gray-500">{iData?.code || '---'}</td>
-                    <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs font-semibold text-primary break-words whitespace-normal leading-tight">{iData?.name || 'Artículo Desconocido'}</td>
+                    <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs font-semibold text-primary break-words whitespace-normal leading-tight">{iData?.name || 'ArtÃ­culo Desconocido'}</td>
                     <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs text-gray-500 text-center lowercase">{iData?.units?.name || 'und'}</td>
                     <td className="px-6 print:px-2 py-4 print:py-1 text-base print:text-sm font-bold text-gray-400 text-right">{item.quantity}</td>
                     <td className="px-6 print:px-2 py-4 print:py-1 text-base print:text-sm font-bold text-primary text-right">
@@ -322,7 +322,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
               {(!requisition.requisition_items || requisition.requisition_items.length === 0) && (
                  <tr>
                    <td colSpan={7} className="px-6 py-12 text-center text-gray-400 text-sm">
-                     La requisa no tiene artículos.
+                     La requisa no tiene artÃ­culos.
                    </td>
                  </tr>
               )}
@@ -346,7 +346,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
         <div className="flex flex-col items-center">
           <div className="w-full border-t border-gray-800"></div>
           <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-gray-800">Entrega</p>
-          <p className="text-[7px] text-gray-600 mt-0.5 font-bold">Almacén General</p>
+          <p className="text-[7px] text-gray-600 mt-0.5 font-bold">AlmacÃ©n General</p>
         </div>
       </div>
       
