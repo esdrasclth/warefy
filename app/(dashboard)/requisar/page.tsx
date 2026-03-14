@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useState, useEffect } from 'react';
 import { FileText, Plus, Search, Printer, Trash2, Eye, Loader2, Check, X, TrendingUp, ClipboardList, Wallet, Activity, Calendar, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
@@ -114,7 +114,7 @@ export default function RequisarPage() {
         requisition_items ( quantity )
       `);
     
-    // Si es Usuario Normal, filtrar por su área
+    // Si es Usuario Normal, filtrar por su Ã¡rea
     if (profile?.role === 'USER' && profile.employees?.area_id) {
       query = query.eq('area_id', profile.employees.area_id);
     }
@@ -150,9 +150,9 @@ export default function RequisarPage() {
 
   const handleDelete = async (id: string) => {
     // SECURITY: RLS policy 'requisitions_delete_admin' garantiza que
-    // solo ADMIN puede eliminar en la BD. Este botón solo se muestra
-    // en el frontend para ADMIN, pero el backend lo refuerza también.
-    if (confirm(`¿Estás seguro de eliminar permanentemente la requisa?`)) {
+    // solo ADMIN puede eliminar en la BD. Este botÃ³n solo se muestra
+    // en el frontend para ADMIN, pero el backend lo refuerza tambiÃ©n.
+    if (confirm(`Â¿EstÃ¡s seguro de eliminar permanentemente la requisa?`)) {
       const { error } = await supabase.from('requisitions').delete().eq('id', id);
       if (error) alert('Error eliminando requisa: ' + error.message);
       else fetchProfileAndRequisitions();
@@ -160,7 +160,7 @@ export default function RequisarPage() {
   };
 
   const updateStatus = async (id: string, newStatus: RequisitionStatus) => {
-    if (confirm(`�Est�s seguro de marcar esta requisa como ${newStatus}?`)) {
+    if (confirm(`¿Estás seguro de marcar esta requisa como ${newStatus}?`)) {
       try {
         const response = await fetch('/api/requisitions/update-status', {
           method: 'POST',
@@ -212,7 +212,7 @@ export default function RequisarPage() {
   });
 
   const handleExportExcel = async () => {
-    if (!dateFrom || !dateTo) return alert('Selecciona un rango de fechas válido.');
+    if (!dateFrom || !dateTo) return alert('Selecciona un rango de fechas vÃ¡lido.');
     setIsExporting(true);
 
     try {
@@ -266,21 +266,21 @@ export default function RequisarPage() {
           const cantEntregada = Number(item.delivered_quantity ?? item.quantity) || 0;
           return {
             'Fecha': req?.created_at
-              ? new Date(req.created_at).toLocaleDateString('es-HN') : '—',
-            'Número de Requisa': req?.consecutive
-              ? `REQ-${String(req.consecutive).padStart(6, '0')}` : '—',
-            'Estado': req?.status || '—',
-            'Área': req?.area_name || '—',
-            'Código Producto': inv?.code || '—',
-            'Descripción Producto': inv?.name || '—',
-            'Categoría': cat?.name || 'Sin Categoría',
+              ? new Date(req.created_at).toLocaleDateString('es-HN') : 'â€”',
+            'NÃºmero de Requisa': req?.consecutive
+              ? `REQ-${String(req.consecutive).padStart(6, '0')}` : 'â€”',
+            'Estado': req?.status || 'â€”',
+            'Ãrea': req?.area_name || 'â€”',
+            'CÃ³digo Producto': inv?.code || 'â€”',
+            'DescripciÃ³n Producto': inv?.name || 'â€”',
+            'CategorÃ­a': cat?.name || 'Sin CategorÃ­a',
             'Cantidad Solicitada': Number(item.quantity) || 0,
             'Cantidad Entregada': cantEntregada,
-            'Código Solicitante': req?.requester_code || '—',
-            'Nombre Solicitante': req?.requester_name || '—',
+            'CÃ³digo Solicitante': req?.requester_code || 'â€”',
+            'Nombre Solicitante': req?.requester_name || 'â€”',
             'Precio Unitario (USD)': precioUnit,
             'Total (USD)': cantEntregada * precioUnit,
-            'Comentarios': req?.comments || '—',
+            'Comentarios': req?.comments || 'â€”',
           };
         });
 
@@ -308,7 +308,7 @@ export default function RequisarPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h1 className="text-3xl font-light text-primary tracking-tight">Requisas</h1>
-          <p className="text-gray-500 mt-2 text-sm">Creación y seguimiento de solicitudes de material.</p>
+          <p className="text-gray-500 mt-2 text-sm">CreaciÃ³n y seguimiento de solicitudes de material.</p>
         </div>
         <div className="flex flex-col sm:flex-row items-end gap-3">
           <div className="flex items-center gap-2 bg-white border border-gray-200 px-3 h-10 shadow-sm">
@@ -319,7 +319,7 @@ export default function RequisarPage() {
               onChange={(e) => setDateFrom(e.target.value)}
               className="text-sm text-primary bg-transparent focus:outline-none h-full"
             />
-            <span className="text-gray-300 text-sm">—</span>
+            <span className="text-gray-300 text-sm">â€”</span>
             <input
               type="date"
               value={dateTo}
@@ -336,7 +336,7 @@ export default function RequisarPage() {
               ? <Loader2 size={16} className="animate-spin" />
               : <FileSpreadsheet size={16} />
             }
-            {isExporting ? 'Exportando…' : 'Descargar Excel'}
+            {isExporting ? 'Exportandoâ€¦' : 'Descargar Excel'}
           </button>
           <Link 
             href="/requisar/nueva"
@@ -348,7 +348,7 @@ export default function RequisarPage() {
         </div>
       </div>
 
-      {/* Métricas del Área */}
+      {/* MÃ©tricas del Ãrea */}
       {!isLoading && areaMetrics && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="bg-white border border-gray-100 border-l-4 border-l-sky-500 p-4 shadow-sm">
@@ -361,7 +361,7 @@ export default function RequisarPage() {
                   ${areaMetrics.consumoMes.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
                 <p className="text-[9px] text-gray-400 mt-1 truncate">
-                  {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu área')}
+                  {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu Ã¡rea')}
                 </p>
               </div>
               <div className="p-2 ml-3 shrink-0 bg-sky-500 text-white">
@@ -380,7 +380,7 @@ export default function RequisarPage() {
                   {areaMetrics.requisasMes.toLocaleString()}
                 </p>
                 <p className="text-[9px] text-gray-400 mt-1 truncate">
-                  {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu área')}
+                  {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu Ã¡rea')}
                 </p>
               </div>
               <div className="p-2 ml-3 shrink-0 bg-blue-500 text-white">
@@ -396,14 +396,14 @@ export default function RequisarPage() {
                   Presupuesto Asignado
                 </p>
                 {areaMetrics.presupuestoAsignado === null ? (
-                  <p className="text-gray-400 text-sm italic">Sin límite</p>
+                  <p className="text-gray-400 text-sm italic">Sin lÃ­mite</p>
                 ) : (
                   <p className="text-xl font-light text-primary tracking-tight truncate">
                     ${areaMetrics.presupuestoAsignado.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </p>
                 )}
                 <p className="text-[9px] text-gray-400 mt-1 truncate">
-                  {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu área')}
+                  {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu Ã¡rea')}
                 </p>
               </div>
               <div className="p-2 ml-3 shrink-0 bg-primary text-white">
@@ -419,14 +419,14 @@ export default function RequisarPage() {
                   Presupuesto Disponible
                 </p>
                 {areaMetrics.presupuestoDisponible === null ? (
-                  <p className="text-gray-400 text-sm italic">Sin límite</p>
+                  <p className="text-gray-400 text-sm italic">Sin lÃ­mite</p>
                 ) : (
                   <p className={`text-xl font-light tracking-tight truncate ${areaMetrics.presupuestoDisponible < 0 ? 'text-red-600' : 'text-primary'}`}>
                     ${areaMetrics.presupuestoDisponible.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </p>
                 )}
                 <p className="text-[9px] text-gray-400 mt-1 truncate">
-                  {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu área')}
+                  {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu Ã¡rea')}
                 </p>
               </div>
               <div className={`p-2 ml-3 shrink-0 text-white ${areaMetrics.presupuestoDisponible !== null && areaMetrics.presupuestoDisponible < 0 ? 'bg-red-500' : 'bg-green-500'}`}>
@@ -445,7 +445,7 @@ export default function RequisarPage() {
           </div>
           <input
             type="text"
-            placeholder="Buscar por código, área, solicitante o estado..."
+            placeholder="Buscar por cÃ³digo, Ã¡rea, solicitante o estado..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full py-2 bg-transparent text-sm focus:outline-none placeholder-gray-400 text-primary"
@@ -474,7 +474,7 @@ export default function RequisarPage() {
         {/* Table Header Bar */}
         <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
           <h2 className="text-xs font-bold text-white uppercase tracking-widest">
-            Listado de Requisas — {filteredRequisitions.length.toLocaleString()} resultados
+            Listado de Requisas â€” {filteredRequisitions.length.toLocaleString()} resultados
           </h2>
         </div>
 
@@ -488,11 +488,11 @@ export default function RequisarPage() {
           <table className="w-full text-left border-collapse table-fixed min-w-[1000px] lg:min-w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-[9px] font-bold text-primary/70 uppercase tracking-tighter">
-                <th className="py-2 px-6 w-[140px]">Código</th>
-                <th className="py-2 px-6 w-[150px]">Área</th>
+                <th className="py-2 px-6 w-[140px]">CÃ³digo</th>
+                <th className="py-2 px-6 w-[150px]">Ãrea</th>
                 <th className="py-2 px-6 w-[180px]">Solicitante</th>
                 <th className="py-2 px-6 w-[100px]">Fecha</th>
-                <th className="py-2 px-6 w-[100px] text-center">Artículos</th>
+                <th className="py-2 px-6 w-[100px] text-center">ArtÃ­culos</th>
                 <th className="py-2 px-6 w-[130px] text-center">Estado</th>
                 <th className="py-2 px-6 w-[140px] text-center sticky right-0 bg-gray-50 border-l border-gray-100 z-10">Acciones</th>
               </tr>
@@ -515,10 +515,10 @@ export default function RequisarPage() {
                         </div>
                       </td>
                       <td className="py-2 px-6">
-                        <span className="text-xs text-gray-700 font-medium truncate block">{req.area_name || 'Sin Área'}</span>
+                        <span className="text-xs text-gray-700 font-medium truncate block">{req.area_name || 'Sin Ãrea'}</span>
                       </td>
                       <td className="py-2 px-6">
-                        <span className="text-xs text-gray-600 truncate block">{req.requester_name || 'Anónimo'}</span>
+                        <span className="text-xs text-gray-600 truncate block">{req.requester_name || 'AnÃ³nimo'}</span>
                       </td>
                       <td className="py-2 px-6 text-xs text-gray-500 italic">
                         {dateStr}
