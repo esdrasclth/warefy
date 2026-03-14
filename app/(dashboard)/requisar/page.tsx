@@ -160,7 +160,7 @@ export default function RequisarPage() {
   };
 
   const updateStatus = async (id: string, newStatus: RequisitionStatus) => {
-    if (confirm(Â¿EstÃ¡s seguro de marcar esta requisa como ?)) {
+    if (confirm(`¿Estás seguro de marcar esta requisa como ${newStatus}?`)) {
       try {
         const response = await fetch('/api/requisitions/update-status', {
           method: 'POST',
