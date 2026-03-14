@@ -1,15 +1,14 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, Trash2, Eye, Loader2 } from 'lucide-react';
+import Link from 'next/link';
 import ProductFormModal, { ProductData } from '@/components/almacen/ProductFormModal';
-import ProductHistoryModal from '@/components/almacen/ProductHistoryModal';
 import { supabase } from '@/utils/supabase/client';
 import type { InventoryItem } from '@/types';
 
 export default function AlmacenPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [historyProduct, setHistoryProduct] = useState<InventoryItem | null>(null);
   const [productToEdit, setProductToEdit] = useState<ProductData | null>(null);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -254,12 +253,13 @@ export default function AlmacenPage() {
 
                     <td className="py-2 px-3 text-center sticky right-0 bg-white group-hover:bg-blue-50/20 transition-colors border-l border-gray-100 shadow-[ -5px_0_10px_-5px_rgba(0,0,0,0.05) ] z-10">
                       <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => setHistoryProduct(item)}
-                          className="text-gray-400 hover:text-blue-500 transition-colors p-1" title="Ver Historial"
+                        <Link
+                          href={`/almacen/historial/${item.id}`}
+                          className="text-gray-400 hover:text-blue-500 transition-colors p-1"
+                          title="Ver Historial"
                         >
                           <Eye size={14} strokeWidth={2} />
-                        </button>
+                        </Link>
                         <button
                           onClick={() => handleEditClick(item)}
                           className="text-gray-400 hover:text-primary transition-colors p-1" title="Editar"
@@ -295,7 +295,6 @@ export default function AlmacenPage() {
         onClose={() => setIsModalOpen(false)}
         onSaveSuccess={fetchItems}
       />
-      <ProductHistoryModal product={historyProduct} onClose={() => setHistoryProduct(null)} />
     </div>
   );
 }
