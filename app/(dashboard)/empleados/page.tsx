@@ -19,12 +19,38 @@ export default function EmpleadosPage() {
   const [isCreatingAccess, setIsCreatingAccess] = useState(false);
   const [accessForm, setAccessForm] = useState({ email: '', password: '', role: 'USER' });
   const [accessMessage, setAccessMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [bannedUsers, setBannedUsers] = useState<Set<string>>(new Set());
 
   // Form states
   const [newArea, setNewArea] = useState({ name: '', description: '' });
   const [newEmployee, setNewEmployee] = useState({ code: '', first_name: '', last_name: '', position: '', area_id: '' });
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchBannedStatus = async (employeeList: Employee[]) => {
+    const userIds = employeeList
+      .filter(e => e.user_id)
+      .map(e => e.user_id as string);
+
+    if (userIds.length === 0) {
+      setBannedUsers(new Set());
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/admin/get-banned-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds })
+      });
+      const data = await res.json();
+      if (data?.bannedIds) {
+        setBannedUsers(new Set(data.bannedIds));
+      }
+    } catch (err) {
+      console.error('Error fetching banned status:', err);
+    }
+  };
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -41,7 +67,10 @@ export default function EmpleadosPage() {
         areas ( name )
       `)
       .order('first_name');
-    if (employeesData) setEmployees(employeesData);
+    if (employeesData) {
+      setEmployees(employeesData);
+      await fetchBannedStatus(employeesData);
+    }
     
     setIsLoading(false);
   };
@@ -154,6 +183,7 @@ export default function EmpleadosPage() {
       (emp.position || '').toLowerCase().includes(q)
     );
   });
+  const activeAccessCount = employees.filter(emp => emp.user_id && !bannedUsers.has(emp.user_id as string)).length;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -208,7 +238,7 @@ export default function EmpleadosPage() {
         <div className="bg-white border border-gray-100 shadow-sm overflow-hidden">
           <div className="bg-primary border-b-2 border-white/20 p-4 flex items-center gap-2">
             <Users size={18} className="text-white" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-widest">Personal Activo ({filteredEmployees.length})</h3>
+            <h3 className="text-sm font-bold text-white uppercase tracking-widest">Personal Activo ({activeAccessCount})</h3>
           </div>
           <div className="overflow-x-auto scrollbar-hide">
             <table className="w-full text-left border-collapse table-fixed min-w-[1000px] lg:min-w-full">
@@ -222,7 +252,10 @@ export default function EmpleadosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filteredEmployees.map((emp) => (
+                {filteredEmployees.map((emp) => {
+                  const isBanned = emp.user_id ? bannedUsers.has(emp.user_id) : false;
+                  const hasAccess = !!emp.user_id;
+                  return (
                   <tr key={emp.id} className="hover:bg-blue-50/20 transition-colors group">
                     <td className="py-2 px-6 text-xs font-mono text-gray-400 truncate">{emp.code}</td>
                     <td className="py-2 px-6">
@@ -246,12 +279,23 @@ export default function EmpleadosPage() {
                           onClick={() => {
                             setSelectedEmployee(emp);
                             setAccessForm({ email: '', password: '', role: 'USER' });
+                            setAccessMessage(null);
                             setIsAccessModalOpen(true);
                           }} 
-                          className={`p-1 transition-colors ${emp.user_id ? 'text-green-500 hover:text-green-700' : 'text-gray-400 hover:text-orange-500'}`} 
-                          title={emp.user_id ? "Gestionar Acceso (Activo)" : "Crear Acceso"}
+                          className={`p-1 transition-colors ${
+                            !hasAccess
+                              ? 'text-gray-400 hover:text-orange-500'
+                              : isBanned
+                                ? 'text-red-400 hover:text-red-600'
+                                : 'text-green-500 hover:text-green-700'
+                          }`} 
+                          title={
+                            !hasAccess ? 'Crear Acceso'
+                            : isBanned ? 'Acceso Desactivado — Click para gestionar'
+                            : 'Acceso Activo — Click para gestionar'
+                          }
                         >
-                          <Key size={14} fill={emp.user_id ? 'currentColor' : 'none'} />
+                          <Key size={14} fill={hasAccess && !isBanned ? 'currentColor' : 'none'} />
                         </button>
                         <button onClick={() => openEditModal(emp)} className="p-1 text-gray-400 hover:text-primary transition-colors" title="Editar">
                           <Edit2 size={14} />
@@ -262,7 +306,8 @@ export default function EmpleadosPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                );
+                })}
                 {filteredEmployees.length === 0 && !isLoading && (
                   <tr>
                     <td colSpan={5} className="px-6 py-12 text-center text-gray-400 text-sm">
@@ -283,7 +328,7 @@ export default function EmpleadosPage() {
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
               <div>
                 <h3 className="text-sm font-bold text-primary uppercase tracking-widest flex items-center gap-2">
-                  <Shield size={16} /> {selectedEmployee.user_id ? 'Actualizar Acceso' : 'Crear Acceso al Sistema'}
+                  <Shield size={16} /> {selectedEmployee.user_id ? 'Gestionar Acceso' : 'Crear Acceso al Sistema'}
                 </h3>
                 <p className="text-[10px] text-gray-500 mt-1 uppercase font-medium">Empleado: {selectedEmployee.first_name} {selectedEmployee.last_name}</p>
               </div>
@@ -301,7 +346,77 @@ export default function EmpleadosPage() {
                 </div>
               )}
 
+              {selectedEmployee.user_id && (
+                <div className="bg-gray-50 border border-gray-100 p-4 space-y-3">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                    Estado del Acceso
+                  </p>
+                  <div className="flex items-center justify-between">
+                    {bannedUsers.has(selectedEmployee.user_id) ? (
+                      <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-1 border text-red-500 border-red-200 bg-red-50">
+                        ● Desactivado
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-1 border text-green-600 border-green-200 bg-green-50">
+                        ● Activo
+                      </span>
+                    )}
+
+                    <button
+                      onClick={async () => {
+                        const isBanned = bannedUsers.has(selectedEmployee.user_id!);
+                        const action = isBanned ? 'enable' : 'disable';
+                        const confirmMsg = isBanned
+                          ? `¿Reactivar el acceso de ${selectedEmployee.first_name} ${selectedEmployee.last_name}?`
+                          : `¿Desactivar el acceso de ${selectedEmployee.first_name} ${selectedEmployee.last_name}? No podrá iniciar sesión.`;
+
+                        if (!confirm(confirmMsg)) return;
+
+                        setIsCreatingAccess(true);
+                        setAccessMessage(null);
+                        try {
+                          const res = await fetch('/api/admin/toggle-access', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              userId: selectedEmployee.user_id,
+                              action
+                            })
+                          });
+                          const data = await res.json();
+                          if (data.error) throw new Error(data.error);
+
+                          setAccessMessage({
+                            type: 'success',
+                            text: isBanned ? 'Acceso reactivado correctamente.' : 'Acceso desactivado correctamente.'
+                          });
+                          await fetchData();
+                        } catch (err: any) {
+                          setAccessMessage({ type: 'error', text: err.message });
+                        } finally {
+                          setIsCreatingAccess(false);
+                        }
+                      }}
+                      disabled={isCreatingAccess}
+                      className={`text-xs font-bold uppercase tracking-widest px-4 py-2 border transition-colors disabled:opacity-50 ${
+                        bannedUsers.has(selectedEmployee.user_id)
+                          ? 'bg-green-600 text-white hover:bg-green-700 border-transparent'
+                          : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                      }`}
+                    >
+                      {isCreatingAccess ? 'Procesando...'
+                        : bannedUsers.has(selectedEmployee.user_id)
+                          ? 'Reactivar Acceso'
+                          : 'Desactivar Acceso'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-4">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">
+                  {selectedEmployee.user_id ? 'Actualizar Credenciales' : 'Credenciales de Acceso'}
+                </p>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
                     <Mail size={12} /> Correo Electrónico
@@ -375,7 +490,7 @@ export default function EmpleadosPage() {
                   disabled={isCreatingAccess || !accessForm.email || !accessForm.password}
                   className="flex-1 bg-primary text-white py-3 text-xs font-bold uppercase tracking-widest hover:bg-primary-dark transition-colors disabled:opacity-50"
                 >
-                  {isCreatingAccess ? 'Procesando...' : (selectedEmployee.user_id ? 'Actualizar Acceso' : 'Habilitar Acceso')}
+                  {isCreatingAccess ? 'Procesando...' : (selectedEmployee.user_id ? 'Actualizar Credenciales' : 'Crear Acceso')}
                 </button>
                 <button 
                   onClick={() => setIsAccessModalOpen(false)}
