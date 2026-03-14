@@ -75,20 +75,24 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
   }, [isLoading, requisition, searchParams]);
 
   const updateStatus = async (newStatus: 'ENTREGADA' | 'CANCELADA') => {
-    if (confirm(`¿Estás seguro de marcar esta requisa como ${newStatus}?`)) {
+    if (confirm(¿Estás seguro de marcar esta requisa como ?)) {
       setIsLoading(true);
-      if (newStatus === 'ENTREGADA') {
-        const updatePromises = requisition.requisition_items.map((item: any) => 
-          supabase.from('requisition_items').update({ delivered_quantity: deliveredQuantities[item.id] }).eq('id', item.id)
-        );
-        await Promise.all(updatePromises);
-      }
-      const { error } = await supabase.from('requisitions').update({ status: newStatus }).eq('id', reqId);
-      if (error) {
+      try {
+        const response = await fetch('/api/requisitions/update-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requisitionId: reqId,
+            status: newStatus,
+            deliveredQuantities: newStatus === 'ENTREGADA' ? deliveredQuantities : undefined
+          })
+        });
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+        fetchRequisition();
+      } catch (error: any) {
         alert('Error actualizando estado: ' + error.message);
         setIsLoading(false);
-      } else {
-        fetchRequisition();
       }
     }
   };

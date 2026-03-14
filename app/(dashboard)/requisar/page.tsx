@@ -160,10 +160,19 @@ export default function RequisarPage() {
   };
 
   const updateStatus = async (id: string, newStatus: RequisitionStatus) => {
-    if (confirm(`¿Estás seguro de marcar esta requisa como ${newStatus}?`)) {
-      const { error } = await supabase.from('requisitions').update({ status: newStatus }).eq('id', id);
-      if (error) alert('Error actualizando estado: ' + error.message);
-      else fetchProfileAndRequisitions();
+    if (confirm(¿Estás seguro de marcar esta requisa como ?)) {
+      try {
+        const response = await fetch('/api/requisitions/update-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requisitionId: id, status: newStatus })
+        });
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+        fetchProfileAndRequisitions();
+      } catch (error: any) {
+        alert('Error actualizando estado: ' + error.message);
+      }
     }
   };
 
