@@ -143,7 +143,7 @@ export default function RegistrosPage() {
       return;
     }
 
-    const mapped = (data as RegistroQueryItem[] || [])
+    const mapped = (data as unknown as RegistroQueryItem[] || [])
       .map((item): RegistroRow => {
         const req = item.requisitions;
         const inv = item.inventory_items;

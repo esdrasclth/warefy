@@ -118,5 +118,5 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  return <AppLayout userProfile={profile}>{children}</AppLayout>;
+  return <AppLayout userProfile={profile ?? undefined}>{children}</AppLayout>;
 }

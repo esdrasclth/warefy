@@ -111,8 +111,8 @@ export default function AlmacenPage() {
       id: product.id,
       code: product.code,
       name: product.name,
-      category_id: product.category_id,
-      unit_id: product.unit_id,
+      category_id: product.category_id!,
+      unit_id: product.unit_id!,
       quantity: product.quantity,
       min_stock: product.min_stock,
       max_stock: product.max_stock,
@@ -226,7 +226,7 @@ export default function AlmacenPage() {
                       {stock.toLocaleString()}
                     </td>
                     <td className="py-2 px-3 text-xs text-right text-blue-600 font-bold bg-blue-50/30">
-                      {item.pending_oc > 0 ? `+${item.pending_oc.toLocaleString()}` : '-'}
+                      {(item.pending_oc ?? 0) > 0 ? `+${(item.pending_oc ?? 0).toLocaleString()}` : '-'}
                     </td>
                     <td className="py-2 px-3 text-xs text-right text-orange-400 font-medium">
                       {committed > 0 ? committed.toLocaleString() : '-'}
@@ -237,7 +237,7 @@ export default function AlmacenPage() {
                       </span>
                     </td>
                     <td className="py-2 px-3 text-xs text-right text-purple-600 font-semibold italic">
-                      {item.avg_consumption > 0 ? item.avg_consumption.toFixed(1) : '0.0'}
+                      {(item.avg_consumption ?? 0) > 0 ? (item.avg_consumption ?? 0).toFixed(1) : '0.0'}
                     </td>
                     <td className="py-2 px-3 text-[10px] text-right text-gray-400 font-mono">
                       {item.min_stock}/{item.max_stock}

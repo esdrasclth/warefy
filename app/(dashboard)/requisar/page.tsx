@@ -64,7 +64,7 @@ export default function RequisarPage() {
         .eq('area_id', areaId)
         .single();
       if (budgetData?.monthly_budget > 0) {
-        presupuestoAsignado = Number(budgetData.monthly_budget);
+        presupuestoAsignado = Number(budgetData?.monthly_budget || 0);
       }
     } else if (isAdmin) {
       const { data: allBudgets } = await supabase
@@ -492,7 +492,7 @@ export default function RequisarPage() {
               {filteredRequisitions.length > 0 ? (
                 filteredRequisitions.map((req) => {
                   const totalItems = req.requisition_items?.reduce((acc: number, curr: RequisitionItem) => acc + (curr.quantity || 0), 0) || 0;
-                  const dateStr = new Date(req.created_at).toLocaleDateString();
+                  const dateStr = req.created_at ? new Date(req.created_at).toLocaleDateString() : '-';
                   const isAdminOrAlmacen = userProfile?.role === 'ADMIN' || userProfile?.role === 'ALMACEN';
                   const isUser = userProfile?.role === 'USER';
                   const isOwnArea = req.area_id === userProfile?.employees?.area_id;

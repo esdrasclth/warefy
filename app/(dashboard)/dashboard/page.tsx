@@ -79,13 +79,14 @@ export default function DashboardPage() {
           supabase.from('requisitions').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth),
           supabase.from('requisitions').select('total_cost, area_name').neq('status', 'CANCELADA').gte('created_at', startOfMonth),
           supabase.from('requisitions').select('id, created_at, status, area_name').order('created_at', { ascending: false }).limit(5),
-          supabase.from('inventory_items').select('id, name, code, quantity, committed_quantity, min_stock, price').eq('status', 'ACTIVE'),
+          supabase.from('inventory_items').select('id, name, code, quantity, committed_quantity, min_stock, max_stock, price, status').eq('status', 'ACTIVE'),
           supabase.from('requisitions').select(`
             id, 
             area_name, 
             created_at,
+            status,
             total_cost,
-            requisition_items ( inventory_item_id, quantity, unit_cost, inventory_items(name, code, categories(name)) )
+            requisition_items ( id, inventory_item_id, quantity, unit_cost, inventory_items(name, code, categories(name)) )
           `).neq('status', 'CANCELADA').gte('created_at', oneYearAgoStr),
           supabase.from('areas').select('name, area_budgets ( monthly_budget )')
         ]);
@@ -122,18 +123,19 @@ export default function DashboardPage() {
             timelineMap[d.toLocaleString('es-ES', { month: 'short', year: 'numeric' })] = 0;
           }
 
-          histReqs.forEach((req: Requisition) => {
+          histReqs.forEach((req) => {
             const d = new Date(req.created_at);
             const monthKey = d.toLocaleString('es-ES', { month: 'short', year: 'numeric' });
             if (timelineMap[monthKey] !== undefined) timelineMap[monthKey] += (Number(req.total_cost) || 0);
 
-            req.requisition_items?.forEach((item: RequisitionItem) => {
+            req.requisition_items?.forEach((item) => {
               const pid = item.inventory_item_id;
               const cost = (item.quantity || 0) * (item.unit_cost || 0);
-              if (!prodMap[pid]) prodMap[pid] = { code: item.inventory_items?.code || 'N/A', name: item.inventory_items?.name || 'Item', cost: 0 };
+              const inv = item.inventory_items as { code?: string; name?: string; categories?: { name?: string } } | null;
+              if (!prodMap[pid]) prodMap[pid] = { code: inv?.code || 'N/A', name: inv?.name || 'Item', cost: 0 };
               prodMap[pid].cost += cost;
 
-              const catName = item.inventory_items?.categories?.name || 'Sin Categoría';
+              const catName = inv?.categories?.name || 'Sin Categoría';
               catMap[catName] = (catMap[catName] || 0) + cost;
             });
           });
@@ -144,12 +146,12 @@ export default function DashboardPage() {
         }
 
         const budgetMap: Record<string, BudgetChartRow> = {};
-        areasWithBudgets?.forEach((area: { name: string; area_budgets?: { monthly_budget?: number } | null }) => {
-          const bdg = area.area_budgets?.monthly_budget || 0;
+        areasWithBudgets?.forEach((area) => {
+          const bdg = area.area_budgets?.[0]?.monthly_budget || 0;
           if (bdg > 0) budgetMap[area.name] = { name: area.name, presupuesto: Number(bdg), consumido: 0 };
         });
 
-        reqsMonth?.forEach((req: Requisition) => {
+        reqsMonth?.forEach((req) => {
           if (req.area_name) {
             if (!budgetMap[req.area_name]) budgetMap[req.area_name] = { name: req.area_name, presupuesto: 0, consumido: 0 };
             budgetMap[req.area_name].consumido += Number(req.total_cost || 0);
@@ -275,7 +277,7 @@ export default function DashboardPage() {
                           <p className="text-sm font-semibold text-primary group-hover:text-blue-600 transition-colors">
                             REQ-{req.id.split('-')[0]}
                           </p>
-                          <p className="text-xs text-gray-400 mt-1">{formatTimeAgo(req.created_at)} • {req.area_name}</p>
+                          <p className="text-xs text-gray-400 mt-1">{req.created_at ? formatTimeAgo(req.created_at) : '-'} • {req.area_name}</p>
                         </div>
                       </div>
                       <span className={`text-[10px] font-bold tracking-widest border px-2 py-1 uppercase ${getStatusColor(req.status)}`}>
@@ -395,7 +397,7 @@ export default function DashboardPage() {
                           })}
                         </Pie>
                         <Tooltip
-                          formatter={(value: number) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total Consumido']}
+                          formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total Consumido']}
                           contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb' }}
                         />
                         <Legend
@@ -430,7 +432,7 @@ export default function DashboardPage() {
                         <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tick={{ fill: '#4b5563' }} />
                         <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
                         <Tooltip
-                          formatter={(value: number) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, '']}
+                          formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, '']}
                           contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb' }}
                           cursor={{ fill: '#f9fafb' }}
                         />
@@ -463,7 +465,7 @@ export default function DashboardPage() {
                         <XAxis dataKey="mes" stroke="#9ca3af" fontSize={11} tick={{ fill: '#4b5563' }} />
                         <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
                         <Tooltip
-                          formatter={(value: number) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total USD']}
+                          formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total USD']}
                           contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb' }}
                         />
                         <Line type="monotone" dataKey="consumo" name="Consumo Mensual Global" stroke="#001d3d" strokeWidth={3} dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2 }} activeDot={{ r: 6 }} />

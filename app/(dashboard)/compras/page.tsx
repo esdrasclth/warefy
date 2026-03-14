@@ -89,7 +89,7 @@ export default function ComprasPage() {
     const dataToExport = filteredPurchases.map(p => ({
       'Código': `COM-${String(p.consecutive).padStart(6, '0')}`,
       'Proveedor': p.suppliers?.name || 'N/A',
-      'Fecha': new Date(p.created_at).toLocaleDateString(),
+      'Fecha': new Date(p.created_at ?? '').toLocaleDateString(),
       'Monto Total': p.total_cost,
       'Estado': p.status,
       'Comentarios': p.comments || ''
@@ -237,7 +237,7 @@ export default function ComprasPage() {
                       </span>
                     </td>
                     <td className="py-2 px-6 text-[11px] text-gray-500 italic">
-                      {new Date(p.created_at).toLocaleDateString()}
+                      {p.created_at ? new Date(p.created_at).toLocaleDateString() : '-'}
                     </td>
                     <td className="py-2 px-6 text-xs font-bold text-primary font-mono text-right">
                       {p.total_cost?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
