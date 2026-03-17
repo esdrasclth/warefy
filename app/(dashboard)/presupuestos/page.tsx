@@ -153,7 +153,7 @@ export default function PresupuestosPage() {
                             step="0.01"
                             value={areaBudgets[area.id] || ''}
                             onChange={(e) => setAreaBudgets({ ...areaBudgets, [area.id]: parseFloat(e.target.value) || 0 })}
-                            className="w-28 bg-gray-50 border border-gray-200 px-3 py-1.5 text-right text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-semibold"
+                            className="w-28 bg-gray-50 border border-gray-200 px-3 py-1.5 text-right text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-semibold text-primary"
                             placeholder="0.00"
                           />
                           <button 
@@ -228,7 +228,7 @@ export default function PresupuestosPage() {
                             step="1"
                             value={productLimits[prod.id] || ''}
                             onChange={(e) => setProductLimits({ ...productLimits, [prod.id]: parseInt(e.target.value) || 0 })}
-                            className="w-24 bg-gray-50 border border-gray-200 px-3 py-1.5 text-right text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-semibold"
+                            className="w-24 bg-gray-50 border border-gray-200 px-3 py-1.5 text-right text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-semibold text-primary"
                             placeholder="0"
                           />
                           <button 

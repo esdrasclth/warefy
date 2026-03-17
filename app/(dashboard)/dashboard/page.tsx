@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts';
 import type { InventoryItem, Requisition, RequisitionItem } from '@/types';
 
-interface ActivityRequisition extends Pick<Requisition, 'id' | 'created_at' | 'status' | 'area_name'> {}
+interface ActivityRequisition extends Pick<Requisition, 'id' | 'created_at' | 'status' | 'area_name'> { }
 
 interface StockAlertItem extends InventoryItem {
   minimum_stock?: number;
@@ -94,7 +94,7 @@ export default function DashboardPage() {
         // Process Metrics
         const totalBudget = budgets?.reduce((acc, b) => acc + (Number(b.monthly_budget) || 0), 0) || 0;
         const monthlyCost = reqsMonth?.reduce((acc, r) => acc + (Number(r.total_cost) || 0), 0) || 0;
-        
+
         // Process Valuation & Alerts
         const totalInventoryValue = items?.reduce((acc, item) => acc + ((item.quantity || 0) * (item.price || 0)), 0) || 0;
         const alerts = items?.filter(item => {
@@ -429,7 +429,7 @@ export default function DashboardPage() {
                         margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tick={{ fill: '#4b5563' }} />
+                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} />
                         <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
                         <Tooltip
                           formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, '']}
@@ -438,7 +438,7 @@ export default function DashboardPage() {
                         />
                         <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                         <Bar dataKey="presupuesto" name="Presupuesto Asignado" fill="#e5e7eb" radius={[4, 4, 0, 0]} />
-                         <Bar dataKey="consumido" name="Consumo MTD" fill="#003566" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="consumido" name="Consumo MTD" fill="#003566" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
@@ -462,7 +462,7 @@ export default function DashboardPage() {
                         margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                        <XAxis dataKey="mes" stroke="#9ca3af" fontSize={11} tick={{ fill: '#4b5563' }} />
+                        <XAxis dataKey="mes" stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} />
                         <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
                         <Tooltip
                           formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total USD']}

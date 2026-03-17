@@ -112,13 +112,13 @@ export default function ComprasPage() {
 
   const filteredPurchases = purchases.filter(p => {
     const q = searchQuery.toLowerCase();
-    const matchesSearch = 
+    const matchesSearch =
       String(p.consecutive).includes(q) ||
       (p.suppliers?.name || '').toLowerCase().includes(q) ||
       (p.comments || '').toLowerCase().includes(q);
-    
+
     const matchesStatus = statusFilter === 'TODAS' || p.status === statusFilter;
-    
+
     return matchesSearch && matchesStatus;
   });
 
@@ -131,14 +131,14 @@ export default function ComprasPage() {
           <p className="text-gray-500 mt-2 text-sm">Registro de adquisición de productos y control de proveedores.</p>
         </div>
         <div className="flex gap-2">
-          <button 
+          <button
             onClick={exportToExcel}
             className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-5 py-3 text-sm font-semibold transition-colors shadow-sm"
           >
             <FileSpreadsheet size={16} />
             Descargar Excel
           </button>
-          <Link 
+          <Link
             href="/compras/nueva"
             className="flex items-center gap-2 bg-primary text-background px-5 py-3 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"
           >
@@ -168,11 +168,10 @@ export default function ComprasPage() {
             <button
               key={f}
               onClick={() => setStatusFilter(f)}
-              className={`px-4 py-2 text-xs font-bold uppercase tracking-widest border transition-colors ${
-                statusFilter === f 
-                  ? 'bg-primary text-white border-primary' 
+              className={`px-4 py-2 text-xs font-bold uppercase tracking-widest border transition-colors ${statusFilter === f
+                  ? 'bg-primary text-white border-primary'
                   : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
-              }`}
+                }`}
             >
               {f}
             </button>
@@ -251,21 +250,21 @@ export default function ComprasPage() {
                       <div className="flex items-center justify-center gap-2">
                         {p.status === 'PENDIENTE' && (
                           <>
-                            <button 
+                            <button
                               onClick={() => handleReceive(p)}
                               className="text-gray-400 hover:text-green-600 transition-colors p-1"
                               title="Recibir"
                             >
                               <Check size={14} strokeWidth={3} />
                             </button>
-                            <Link 
+                            <Link
                               href={`/compras/editar/${p.id}`}
                               className="text-gray-400 hover:text-primary transition-colors p-1"
                               title="Editar"
                             >
                               <Edit size={14} strokeWidth={2} />
                             </Link>
-                            <button 
+                            <button
                               onClick={() => updateStatus(p.id, 'CANCELADA')}
                               className="text-gray-400 hover:text-red-500 transition-colors p-1"
                               title="Anular"
@@ -275,7 +274,7 @@ export default function ComprasPage() {
                           </>
                         )}
                         {p.status !== 'RECIBIDA' && (
-                           <button 
+                          <button
                             onClick={() => handleDelete(p.id)}
                             className="text-gray-400 hover:text-red-600 transition-colors p-1"
                             title="Eliminar"
@@ -283,7 +282,7 @@ export default function ComprasPage() {
                             <Trash2 size={14} />
                           </button>
                         )}
-                        <Link 
+                        <Link
                           href={`/compras/${p.id}`}
                           className="text-gray-400 hover:text-blue-500 transition-colors p-1"
                           title="Ver"

@@ -32,8 +32,8 @@ interface Supplier {
 export default function NuevaCompraView() {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
-  
-  
+
+
   // Supplier State
   const [supplierSearch, setSupplierSearch] = useState('');
   const [supplierResults, setSupplierResults] = useState<Supplier[]>([]);
@@ -90,7 +90,7 @@ export default function NuevaCompraView() {
   const handleSelectItem = (item: InventoryItem) => {
     const exists = selectedItems.find(si => si.inventoryItem.id === item.id);
     if (exists) {
-      setSelectedItems(selectedItems.map(si => 
+      setSelectedItems(selectedItems.map(si =>
         si.inventoryItem.id === item.id ? { ...si, quantity: si.quantity + 1 } : si
       ));
     } else {
@@ -118,7 +118,7 @@ export default function NuevaCompraView() {
     setIsSaving(true);
     try {
       const totalCost = selectedItems.reduce((acc, curr) => acc + (curr.quantity * curr.unitCost), 0);
-      
+
       const { data: pData, error: pError } = await supabase
         .from('purchases')
         .insert({
@@ -163,8 +163,8 @@ export default function NuevaCompraView() {
             <p className="text-gray-500 mt-1 text-sm">Registra una nueva adquisición de suministros.</p>
           </div>
         </div>
-        
-        <button 
+
+        <button
           onClick={handleSubmit} disabled={isSaving || selectedItems.length === 0 || !selectedSupplier}
           className="flex items-center gap-2 bg-primary text-background px-6 py-3 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent disabled:opacity-50"
         >
@@ -174,31 +174,31 @@ export default function NuevaCompraView() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+
         {/* Left: Supplier & Linking */}
         <div className="lg:col-span-1 space-y-6">
-          
+
           {/* Box: Supplier */}
           <div className="bg-white border border-gray-100 p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">1. Proveedor</h3>
-              <button 
+              <button
                 onClick={() => setShowNewSupplierModal(true)}
                 className="text-[10px] font-bold text-primary hover:text-primary-dark flex items-center gap-1 uppercase tracking-tighter"
               >
                 <UserPlus size={12} /> Nuevo
               </button>
             </div>
-            
+
             <div className="relative">
               {!selectedSupplier ? (
                 <div className="flex items-center bg-gray-50 border border-gray-200 group focus-within:border-primary transition-colors">
                   <div className="pl-3 pr-2 text-gray-400">
                     <Building2 size={18} />
                   </div>
-                  <input 
-                    type="text" 
-                    placeholder="Buscar proveedor..." 
+                  <input
+                    type="text"
+                    placeholder="Buscar proveedor..."
                     value={supplierSearch}
                     onChange={e => setSupplierSearch(e.target.value)}
                     className="w-full px-3 py-2 text-sm bg-transparent focus:outline-none"
@@ -220,13 +220,29 @@ export default function NuevaCompraView() {
               {supplierResults.length > 0 && !selectedSupplier && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl z-50">
                   {supplierResults.map(s => (
-                    <button
-                      key={s.id}
-                      onClick={() => { setSelectedSupplier(s); setSupplierResults([]); }}
-                      className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm border-b border-gray-50 last:border-0"
-                    >
-                      {s.name}
-                    </button>
+                    <div key={s.id} className="flex items-center hover:bg-gray-50 border-b border-gray-50 last:border-0 group">
+                      <button
+                        onClick={() => { setSelectedSupplier(s); setSupplierResults([]); }}
+                        className="flex-1 text-left px-4 py-2 text-sm"
+                      >
+                        {s.name}
+                      </button>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (confirm(`¿Estás seguro de que deseas eliminar al proveedor "${s.name}"?`)) {
+                            const { error } = await supabase.from('suppliers').delete().eq('id', s.id);
+                            if (error) alert('Error al eliminar: ' + error.message);
+                            else {
+                              setSupplierResults(supplierResults.filter(sr => sr.id !== s.id));
+                            }
+                          }
+                        }}
+                        className="p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -237,8 +253,8 @@ export default function NuevaCompraView() {
           {/* Box: Manual Reference */}
           <div className="bg-white border border-gray-100 p-6 shadow-sm">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">2. N° Talonario / Referencia Manual</h3>
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder="Ej: TAL-9988"
               value={manualRequisitionNumber}
               onChange={e => setManualRequisitionNumber(e.target.value)}
@@ -250,7 +266,7 @@ export default function NuevaCompraView() {
           {/* Box: Comments */}
           <div className="bg-white border border-gray-100 p-6 shadow-sm">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">3. Comentarios</h3>
-            <textarea 
+            <textarea
               placeholder="Notas internas sobra la compra..."
               value={comments}
               onChange={e => setComments(e.target.value)}
@@ -272,9 +288,9 @@ export default function NuevaCompraView() {
                 <div className="pl-3 flex items-center text-gray-400">
                   <Search size={18} />
                 </div>
-                <input 
-                  type="text" 
-                  placeholder="Agregar producto manual por nombre o código..." 
+                <input
+                  type="text"
+                  placeholder="Agregar producto manual por nombre o código..."
                   value={itemSearch}
                   onChange={e => setItemSearch(e.target.value)}
                   className="w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none"
@@ -320,17 +336,17 @@ export default function NuevaCompraView() {
                         <p className="text-[10px] text-gray-400 font-mono">{item.inventoryItem.code}</p>
                       </td>
                       <td className="py-4">
-                        <input 
+                        <input
                           type="number"
                           value={item.quantity || ""}
                           onChange={(e) => handleUpdateItem(item.inventoryItem.id, 'quantity', e.target.value)}
-                          className="w-20 mx-auto block border border-gray-200 p-1.5 text-sm text-center focus:border-primary outline-none"
+                          className="w-20 mx-auto block border border-gray-200 bg-white p-1.5 text-sm text-center focus:border-primary outline-none"
                         />
                       </td>
                       <td className="py-4 px-2">
                         <div className="flex items-center gap-1 border border-gray-200 p-1.5 bg-white focus-within:border-primary">
                           <span className="text-xs text-gray-400">$</span>
-                          <input 
+                          <input
                             type="number"
                             step="0.01"
                             value={item.unitCost || ""}
@@ -343,7 +359,7 @@ export default function NuevaCompraView() {
                         ${(item.quantity * item.unitCost).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-4 text-center">
-                        <button 
+                        <button
                           onClick={() => setSelectedItems(selectedItems.filter(si => si.inventoryItem.id !== item.inventoryItem.id))}
                           className="text-gray-300 hover:text-red-500 transition-colors"
                         >
@@ -380,8 +396,8 @@ export default function NuevaCompraView() {
 
       {/* New Supplier Modal */}
       {showNewSupplierModal && (
-        <SupplierModal 
-          onClose={() => setShowNewSupplierModal(false)} 
+        <SupplierModal
+          onClose={() => setShowNewSupplierModal(false)}
           onCreated={(s) => { setSelectedSupplier(s); setShowNewSupplierModal(false); }}
         />
       )}
@@ -398,50 +414,71 @@ function SupplierModal({ onClose, onCreated }: { onClose: () => void, onCreated:
   const handleSave = async () => {
     if (!name.trim()) return;
     setIsSaving(true);
-    const { data, error } = await supabase
-      .from('suppliers')
-      .insert({ name, tax_id: taxId, email })
-      .select()
-      .single();
-    
-    if (error) alert('Error: ' + error.message);
-    else onCreated(data);
-    setIsSaving(false);
+    try {
+      // 1. Check for duplicates
+      const { data: existing, error: checkError } = await supabase
+        .from('suppliers')
+        .select('id, name')
+        .or(`name.ilike.${name.trim()},tax_id.eq.${taxId.trim()}`)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      if (existing) {
+        alert(`Ya existe un proveedor con ese nombre o RTN: ${existing.name}`);
+        setIsSaving(false);
+        return;
+      }
+
+      // 2. Insert if not duplicate
+      const { data, error } = await supabase
+        .from('suppliers')
+        .insert({ name: name.trim(), tax_id: taxId.trim(), email: email.trim() })
+        .select()
+        .single();
+
+      if (error) throw error;
+      onCreated(data);
+    } catch (error: any) {
+      alert('Error: ' + error.message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-      <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
       <div className="bg-white border border-gray-100 shadow-sm p-6 w-full max-w-md animate-in zoom-in-95 duration-200">
         <h2 className="text-2xl font-light text-primary mb-6">Nuevo Proveedor</h2>
         <div className="space-y-4">
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Nombre Completo</label>
-            <input 
+            <input
               type="text" value={name} onChange={e => setName(e.target.value)}
-              className="w-full border border-gray-200 p-3 text-sm focus:border-primary outline-none"
+              className="w-full border border-gray-200 bg-white p-3 text-sm focus:border-primary outline-none"
               placeholder="Ej. Suministros Industriales S.A."
             />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">RTN / ID Fiscal</label>
-            <input 
+            <input
               type="text" value={taxId} onChange={e => setTaxId(e.target.value)}
-              className="w-full border border-gray-200 p-3 text-sm focus:border-primary outline-none"
+              className="w-full border border-gray-200 bg-white p-3 text-sm focus:border-primary outline-none"
               placeholder="0801-1999-XXXXXX"
             />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Email Contacto</label>
-            <input 
+            <input
               type="email" value={email} onChange={e => setEmail(e.target.value)}
-              className="w-full border border-gray-200 p-3 text-sm focus:border-primary outline-none"
+              className="w-full border border-gray-200 bg-white p-3 text-sm focus:border-primary outline-none"
               placeholder="ventas@proveedor.com"
             />
           </div>
         </div>
         <div className="flex gap-3 mt-8">
           <button onClick={onClose} className="flex-1 py-3 text-sm font-bold text-gray-400 hover:bg-gray-50 uppercase tracking-widest transition-colors">Cancelar</button>
-          <button 
+          <button
             onClick={handleSave} disabled={isSaving || !name}
             className="flex-1 py-3 text-sm font-bold bg-primary text-white hover:bg-primary-dark uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
           >

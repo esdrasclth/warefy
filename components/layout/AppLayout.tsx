@@ -13,7 +13,7 @@ export default function AppLayout({ children, userProfile }: AppLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-screen print:h-auto bg-gray-50 print:bg-white overflow-hidden print:overflow-visible text-primary">
+    <div className="flex h-screen print:h-auto bg-gray-50 print:bg-white overflow-hidden print:overflow-visible text-foreground">
       <div className="print:hidden z-50 h-full">
         <Sidebar 
           isOpen={isSidebarOpen} 

@@ -79,7 +79,7 @@ export default function ConfiguracionPage() {
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                     L.<span className="mx-1 text-gray-200">|</span> 1.00 $ = 
                   </div>
-                  <input
+                   <input
                     type="number"
                     step="0.01"
                     min="0"
@@ -96,7 +96,7 @@ export default function ConfiguracionPage() {
                   <div className="p-2 bg-primary text-white rounded shrink-0">
                     <DollarSign size={20} />
                   </div>
-                  <div>
+                   <div>
                     <h3 className="text-xs font-bold text-primary uppercase tracking-widest mb-1">Conversión Activa</h3>
                     <p className="text-xs text-gray-600 leading-relaxed">
                       El sistema multiplicará automáticamente o dividirá las cantidades ingresadas por los usuarios basándose en este factor `(Ej: Lps. 500 / {exchangeRate || '25.00'})`.

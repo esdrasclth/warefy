@@ -11,12 +11,11 @@ interface ProductHistoryModalProps {
 }
 
 export default function ProductHistoryModal({ product, onClose }: ProductHistoryModalProps) {
-  if (!product) return null;
-
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (!product) return;
     const fetchHistory = async () => {
       setIsLoading(true);
       const { data, error } = await supabase
@@ -48,7 +47,9 @@ export default function ProductHistoryModal({ product, onClose }: ProductHistory
     };
 
     fetchHistory();
-  }, [product.id]);
+  }, [product?.id]);
+
+  if (!product) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary-dark/40 backdrop-blur-sm transition-opacity p-4">

@@ -1,6 +1,6 @@
 'use client';
 
-import { Menu, UserCircle, LogOut, Shield } from 'lucide-react';
+import { Menu, LogOut, Shield } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase/client';
 import type { UserProfile } from '@/types';

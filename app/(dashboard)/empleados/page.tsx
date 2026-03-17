@@ -450,7 +450,7 @@ export default function EmpleadosPage() {
                   <select 
                     value={accessForm.role}
                     onChange={(e) => setAccessForm({...accessForm, role: e.target.value})}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition-all"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm transition-all text-primary"
                   >
                     <option value="ADMIN">ADMINISTRADOR (Todo)</option>
                     <option value="ALMACEN">ALMACÉN (Inventario/Compras)</option>
@@ -506,7 +506,7 @@ export default function EmpleadosPage() {
 
       {/* --- MODAL: NUEVA ÁREA --- */}
       {isAreaModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary-dark/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white max-w-md w-full shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-200">
             <div className="bg-primary border-b-2 border-white/20 p-5 flex justify-between items-center">
               <div className="flex items-center gap-3">
@@ -526,7 +526,7 @@ export default function EmpleadosPage() {
                   required
                   value={newArea.name}
                   onChange={e => setNewArea({...newArea, name: e.target.value})}
-                  className="w-full border-b border-gray-300 py-2 focus:outline-none focus:border-primary transition-colors text-primary font-medium" 
+                  className="w-full border-b border-gray-300 py-2 focus:outline-none focus:border-primary transition-colors text-primary bg-transparent font-medium" 
                   placeholder="Ej. Producción, Logística..."
                 />
               </div>
@@ -537,7 +537,7 @@ export default function EmpleadosPage() {
                   rows={2}
                   value={newArea.description}
                   onChange={e => setNewArea({...newArea, description: e.target.value})}
-                  className="w-full border border-gray-300 rounded-sm p-3 focus:outline-none focus:border-primary transition-colors text-gray-600 text-sm resize-none" 
+                  className="w-full border border-gray-300 rounded-sm p-3 focus:outline-none focus:border-primary transition-colors text-gray-600 bg-transparent text-sm resize-none" 
                   placeholder="Breve detalle de las funciones del área..."
                 />
               </div>
@@ -566,8 +566,8 @@ export default function EmpleadosPage() {
 
       {/* --- MODAL: NUEVO EMPLEADO --- */}
       {isEmployeeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary-dark/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white max-w-xl w-full shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white max-xl w-full shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-200">
             <div className="bg-primary border-b-2 border-white/20 p-5 flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <Users className="text-white" size={24} />
@@ -588,7 +588,7 @@ export default function EmpleadosPage() {
                     required
                     value={newEmployee.code}
                     onChange={e => setNewEmployee({...newEmployee, code: e.target.value})}
-                    className="w-full border-b border-gray-300 py-2 focus:outline-none focus:border-primary transition-colors text-primary font-mono text-sm uppercase" 
+                    className="w-full border-b border-gray-300 py-2 focus:outline-none focus:border-primary transition-colors text-primary bg-transparent font-mono text-sm uppercase" 
                     placeholder="Ej. EMP-001"
                   />
                 </div>
@@ -598,7 +598,7 @@ export default function EmpleadosPage() {
                     type="text" 
                     value={newEmployee.position}
                     onChange={e => setNewEmployee({...newEmployee, position: e.target.value})}
-                    className="w-full border-b border-gray-300 py-2 focus:outline-none focus:border-primary transition-colors text-primary font-medium" 
+                    className="w-full border-b border-gray-300 py-2 focus:outline-none focus:border-primary transition-colors text-primary bg-transparent font-medium" 
                     placeholder="Ej. Gerente de Bodega"
                   />
                 </div>
@@ -612,7 +612,7 @@ export default function EmpleadosPage() {
                     required
                     value={newEmployee.first_name}
                     onChange={e => setNewEmployee({...newEmployee, first_name: e.target.value})}
-                    className="w-full border-b border-gray-300 py-2 focus:outline-none focus:border-primary transition-colors text-primary font-medium" 
+                    className="w-full border-b border-gray-300 py-2 focus:outline-none focus:border-primary transition-colors text-primary bg-transparent font-medium" 
                     placeholder="Ej. Carlos Roberto"
                   />
                 </div>
@@ -623,7 +623,7 @@ export default function EmpleadosPage() {
                     required
                     value={newEmployee.last_name}
                     onChange={e => setNewEmployee({...newEmployee, last_name: e.target.value})}
-                    className="w-full border-b border-gray-300 py-2 focus:outline-none focus:border-primary transition-colors text-primary font-medium" 
+                    className="w-full border-b border-gray-300 py-2 focus:outline-none focus:border-primary transition-colors text-primary bg-transparent font-medium" 
                     placeholder="Ej. Martínez"
                   />
                 </div>

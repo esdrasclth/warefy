@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { useState, useEffect } from 'react';
 import { FileText, Plus, Search, Printer, Trash2, Eye, Loader2, Check, X, TrendingUp, ClipboardList, Wallet, Activity, Calendar, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
@@ -15,7 +15,7 @@ interface AreaMetrics {
 export default function RequisarPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODAS' | RequisitionStatus>('TODAS');
-  
+
   const [requisitions, setRequisitions] = useState<Requisition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -90,7 +90,7 @@ export default function RequisarPage() {
 
   const fetchProfileAndRequisitions = async () => {
     setIsLoading(true);
-    
+
     // 1. Obtener perfil
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
@@ -100,7 +100,7 @@ export default function RequisarPage() {
       .select('*, employees(*)')
       .eq('id', session.user.id)
       .single();
-    
+
     setUserProfile(profile);
     if (profile) {
       await fetchAreaMetrics(profile);
@@ -113,7 +113,7 @@ export default function RequisarPage() {
         *,
         requisition_items ( quantity )
       `);
-    
+
     // Si es Usuario Normal, filtrar por su Ã¡rea
     if (profile?.role === 'USER' && profile.employees?.area_id) {
       query = query.eq('area_id', profile.employees.area_id);
@@ -179,7 +179,7 @@ export default function RequisarPage() {
 
 
   const getStatusColor = (status: RequisitionStatus) => {
-    switch(status) {
+    switch (status) {
       case 'ENTREGADA': return 'text-green-600 border-green-200 bg-green-50';
       case 'CANCELADA': return 'text-red-500 border-red-200 bg-red-50';
       case 'PENDIENTE': return 'text-blue-600 border-blue-200 bg-blue-50';
@@ -191,20 +191,20 @@ export default function RequisarPage() {
   const filteredRequisitions = requisitions.filter(req => {
     const statusStr = (req.status || '').toUpperCase() as RequisitionStatus;
     const areaStr = req.area_name || '';
-    
+
     // items count calculation
     const totalItems = req.requisition_items?.reduce((acc: number, curr: RequisitionItem) => acc + (curr.quantity || 0), 0) || 0;
 
     // 1. Status Filter
     if (statusFilter !== 'TODAS' && statusStr !== statusFilter) return false;
-    
+
     // 2. Search Query (ID, Area, Status, Items)
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      const match = req.id.toLowerCase().includes(q) 
-                  || areaStr.toLowerCase().includes(q)
-                  || statusStr.toLowerCase().includes(q)
-                  || totalItems.toString().includes(q);
+      const match = req.id.toLowerCase().includes(q)
+        || areaStr.toLowerCase().includes(q)
+        || statusStr.toLowerCase().includes(q)
+        || totalItems.toString().includes(q);
       if (!match) return false;
     }
 
@@ -338,7 +338,7 @@ export default function RequisarPage() {
             }
             {isExporting ? 'Exportandoâ€¦' : 'Descargar Excel'}
           </button>
-          <Link 
+          <Link
             href="/requisar/nueva"
             className="flex items-center gap-2 bg-primary text-background px-5 h-10 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"
           >
@@ -457,11 +457,10 @@ export default function RequisarPage() {
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
-              className={`px-4 py-2 text-xs font-bold uppercase tracking-widest border transition-colors ${
-                statusFilter === status 
-                  ? 'bg-primary text-white border-primary' 
+              className={`px-4 py-2 text-xs font-bold uppercase tracking-widest border transition-colors ${statusFilter === status
+                  ? 'bg-primary text-white border-primary'
                   : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
-              }`}
+                }`}
             >
               {status}
             </button>
@@ -480,7 +479,7 @@ export default function RequisarPage() {
 
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-sm z-20">
-             <Loader2 size={32} className="animate-spin text-primary" />
+            <Loader2 size={32} className="animate-spin text-primary" />
           </div>
         )}
 
@@ -533,57 +532,57 @@ export default function RequisarPage() {
                       </td>
                       <td className="py-2 px-6 text-center sticky right-0 bg-white group-hover:bg-blue-50/20 transition-colors border-l border-gray-100 shadow-[ -5px_0_10px_-5px_rgba(0,0,0,0.05) ] z-10">
                         <div className="flex items-center justify-center gap-2">
-                           {req.status === 'PENDIENTE' && (
-                             <>
-                               {isAdminOrAlmacen && (
-                                 <button 
+                          {req.status === 'PENDIENTE' && (
+                            <>
+                              {isAdminOrAlmacen && (
+                                <button
                                   onClick={() => updateStatus(req.id, 'ENTREGADA')}
-                                  className="p-1 text-gray-400 hover:text-green-600 transition-colors" 
+                                  className="p-1 text-gray-400 hover:text-green-600 transition-colors"
                                   title="Entregar"
-                                 >
-                                   <Check size={14} strokeWidth={3} />
-                                 </button>
-                               )}
-                               {(isAdminOrAlmacen || (isUser && isOwnArea)) && (
-                                 <button 
+                                >
+                                  <Check size={14} strokeWidth={3} />
+                                </button>
+                              )}
+                              {(isAdminOrAlmacen || (isUser && isOwnArea)) && (
+                                <button
                                   onClick={() => updateStatus(req.id, 'CANCELADA')}
-                                  className="p-1 text-gray-400 hover:text-red-500 transition-colors" 
+                                  className="p-1 text-gray-400 hover:text-red-500 transition-colors"
                                   title="Cancelar"
-                                 >
-                                   <X size={14} strokeWidth={3} />
-                                 </button>
-                               )}
-                             </>
-                           )}
-                           
-                           {req.status === 'PENDIENTE DE APROBACION' && isAdminOrAlmacen && (
-                             <button 
-                                onClick={() => updateStatus(req.id, 'PENDIENTE')}
-                                className="p-1 text-orange-400 hover:text-orange-600 transition-colors" 
-                                title="Autorizar"
-                             >
-                               <Check size={14} strokeWidth={3} />
-                             </button>
-                           )}
-                           <Link 
+                                >
+                                  <X size={14} strokeWidth={3} />
+                                </button>
+                              )}
+                            </>
+                          )}
+
+                          {req.status === 'PENDIENTE DE APROBACION' && isAdminOrAlmacen && (
+                            <button
+                              onClick={() => updateStatus(req.id, 'PENDIENTE')}
+                              className="p-1 text-orange-400 hover:text-orange-600 transition-colors"
+                              title="Autorizar"
+                            >
+                              <Check size={14} strokeWidth={3} />
+                            </button>
+                          )}
+                          <Link
                             href={`/requisar/${req.id}?print=true`}
-                            className="p-1 text-gray-400 hover:text-blue-500 transition-colors" 
+                            className="p-1 text-gray-400 hover:text-blue-500 transition-colors"
                             title="Imprimir"
-                           >
-                             <Printer size={14} />
-                           </Link>
-                           <Link href={`/requisar/${req.id}`} className="p-1 text-gray-400 hover:text-primary transition-colors" title="Detalles">
-                             <Eye size={14} />
-                           </Link>
-                           {userProfile?.role === 'ADMIN' && req.status !== 'ENTREGADA' && (
-                             <button 
+                          >
+                            <Printer size={14} />
+                          </Link>
+                          <Link href={`/requisar/${req.id}`} className="p-1 text-gray-400 hover:text-primary transition-colors" title="Detalles">
+                            <Eye size={14} />
+                          </Link>
+                          {userProfile?.role === 'ADMIN' && req.status !== 'ENTREGADA' && (
+                            <button
                               onClick={() => handleDelete(req.id)}
-                              className="p-1 text-gray-400 hover:text-red-500 transition-colors" 
+                              className="p-1 text-gray-400 hover:text-red-500 transition-colors"
                               title="Eliminar"
-                             >
-                               <Trash2 size={14} />
-                             </button>
-                           )}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
