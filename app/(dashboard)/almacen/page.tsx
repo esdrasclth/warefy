@@ -5,7 +5,6 @@ import Link from 'next/link';
 import ProductFormModal, { ProductData } from '@/components/almacen/ProductFormModal';
 import { supabase } from '@/utils/supabase/client';
 import type { InventoryItem } from '@/types';
-import * as XLSX from 'xlsx';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -82,16 +81,24 @@ export default function AlmacenPage() {
       .channel('almacen-realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'inventory_items' },
-        () => {
-          fetchItems();
+        { event: 'UPDATE', schema: 'public', table: 'inventory_items' },
+        (payload) => {
+          // Update item in-place without full refetch
+          setItems(prev => prev.map(item =>
+            item.id === payload.new.id ? { ...item, ...payload.new } : item
+          ));
         }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'requisition_items' },
-        () => {
-          fetchItems();
+        { event: 'INSERT', schema: 'public', table: 'inventory_items' },
+        () => { fetchItems(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'inventory_items' },
+        (payload) => {
+          setItems(prev => prev.filter(item => item.id !== payload.old.id));
         }
       )
       .subscribe();
@@ -130,13 +137,14 @@ export default function AlmacenPage() {
     setIsModalOpen(true);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (filteredItems.length === 0) {
       alert('No hay datos para exportar.');
       return;
     }
 
-    // 1. Prepare data for Excel
+    const XLSX = await import('xlsx');
+
     const dataToExport = filteredItems.map(item => ({
       'Código': item.code,
       'Artículo': item.name,
@@ -154,33 +162,15 @@ export default function AlmacenPage() {
       'Estado': item.status === 'ACTIVE' ? 'ACTIVO' : 'INACTIVO'
     }));
 
-    // 2. Create worksheet
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-
-    // 3. Create workbook and append worksheet
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventario');
-
-    // 4. Set column widths (optional but nice)
-    const wscols = [
-      { wch: 10 }, // Código
-      { wch: 30 }, // Artículo
-      { wch: 15 }, // Categoría
-      { wch: 10 }, // Unidad
-      { wch: 10 }, // Existencia
-      { wch: 12 }, // OC Pendiente
-      { wch: 12 }, // Comprometido
-      { wch: 10 }, // Disponible
-      { wch: 12 }, // Consumo Prom.
-      { wch: 10 }, // Mínimo
-      { wch: 10 }, // Máximo
-      { wch: 10 }, // Precio
-      { wch: 12 }, // Total
-      { wch: 10 }  // Estado
+    worksheet['!cols'] = [
+      { wch: 10 }, { wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 10 },
+      { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
+      { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }
     ];
-    worksheet['!cols'] = wscols;
 
-    // 5. Download file
     const date = new Date().toISOString().split('T')[0];
     XLSX.writeFile(workbook, `Inventario_Warefy_${date}.xlsx`);
   };

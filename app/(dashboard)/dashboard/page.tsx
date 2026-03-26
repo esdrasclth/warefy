@@ -1,10 +1,10 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Package, Wallet, ClipboardList, Activity, Loader2, ArrowRight, DollarSign } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts';
-import type { InventoryItem, Requisition, RequisitionItem } from '@/types';
+import type { InventoryItem, Requisition } from '@/types';
 
 interface ActivityRequisition extends Pick<Requisition, 'id' | 'consecutive' | 'created_at' | 'status' | 'area_name'> { }
 
@@ -34,180 +34,208 @@ interface CategoryChartRow {
   value: number;
 }
 
+interface DashboardState {
+  isLoading: boolean;
+  metrics: {
+    totalProducts: number;
+    totalInventoryValue: number;
+    totalBudget: number;
+    totalRequisitionsMTD: number;
+    monthlyCost: number;
+  };
+  recentActivity: ActivityRequisition[];
+  stockAlerts: StockAlertItem[];
+  timelineChartData: TimelineChartRow[];
+  productChartData: ProductChartRow[];
+  budgetChartData: BudgetChartRow[];
+  categoryChartData: CategoryChartRow[];
+}
+
 export default function DashboardPage() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [metrics, setMetrics] = useState({
-    totalProducts: 0,
-    totalInventoryValue: 0,
-    totalBudget: 0,
-    totalRequisitionsMTD: 0,
-    monthlyCost: 0
+  const [state, setState] = useState<DashboardState>({
+    isLoading: true,
+    metrics: { totalProducts: 0, totalInventoryValue: 0, totalBudget: 0, totalRequisitionsMTD: 0, monthlyCost: 0 },
+    recentActivity: [],
+    stockAlerts: [],
+    timelineChartData: [],
+    productChartData: [],
+    budgetChartData: [],
+    categoryChartData: [],
   });
 
-  const [recentActivity, setRecentActivity] = useState<ActivityRequisition[]>([]);
-  const [stockAlerts, setStockAlerts] = useState<StockAlertItem[]>([]);
+  // Fast queries: metrics, recent activity, stock alerts — called on realtime too
+  const fetchLiveMetrics = useCallback(async () => {
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
-  // Charts State
-  const [timelineChartData, setTimelineChartData] = useState<TimelineChartRow[]>([]);
-  const [productChartData, setProductChartData] = useState<ProductChartRow[]>([]);
-  const [budgetChartData, setBudgetChartData] = useState<BudgetChartRow[]>([]);
-  const [categoryChartData, setCategoryChartData] = useState<CategoryChartRow[]>([]);
+    const [
+      { count: prodCount },
+      { data: budgets },
+      { count: reqCount },
+      { data: reqsMonth },
+      { data: recentReqs },
+      { data: stockItems },
+      { data: areasWithBudgets },
+    ] = await Promise.all([
+      supabase.from('inventory_items').select('id', { count: 'exact', head: true }).eq('status', 'ACTIVE'),
+      supabase.from('area_budgets').select('monthly_budget'),
+      supabase.from('requisitions').select('id', { count: 'exact', head: true }).gte('created_at', startOfMonth),
+      supabase.from('requisitions').select('total_cost, area_name').neq('status', 'CANCELADA').gte('created_at', startOfMonth),
+      supabase.from('requisitions').select('id, consecutive, created_at, status, area_name').order('created_at', { ascending: false }).limit(5),
+      supabase.from('inventory_items').select('id, name, code, quantity, committed_quantity, min_stock, max_stock, price, status').eq('status', 'ACTIVE'),
+      supabase.from('areas').select('name, area_budgets(monthly_budget)'),
+    ]);
+
+    const totalBudget = budgets?.reduce((acc, b) => acc + (Number(b.monthly_budget) || 0), 0) || 0;
+    const monthlyCost = reqsMonth?.reduce((acc, r) => acc + (Number(r.total_cost) || 0), 0) || 0;
+    const totalInventoryValue = stockItems?.reduce((acc, i) => acc + ((i.quantity || 0) * (i.price || 0)), 0) || 0;
+    const alerts = stockItems
+      ?.filter(item => (item.quantity - (item.committed_quantity || 0)) <= (item.min_stock || 0))
+      .sort((a, b) => (a.quantity - (a.committed_quantity || 0)) - (b.quantity - (b.committed_quantity || 0)))
+      .slice(0, 10) || [];
+
+    const budgetMap: Record<string, BudgetChartRow> = {};
+    areasWithBudgets?.forEach(area => {
+      const bdg = (area.area_budgets as { monthly_budget: number }[] | null)?.[0]?.monthly_budget || 0;
+      if (bdg > 0) budgetMap[area.name] = { name: area.name, presupuesto: Number(bdg), consumido: 0 };
+    });
+    reqsMonth?.forEach(req => {
+      if (req.area_name) {
+        if (!budgetMap[req.area_name]) budgetMap[req.area_name] = { name: req.area_name, presupuesto: 0, consumido: 0 };
+        budgetMap[req.area_name].consumido += Number(req.total_cost || 0);
+      }
+    });
+
+    return {
+      metrics: { totalProducts: prodCount || 0, totalInventoryValue, totalBudget, totalRequisitionsMTD: reqCount || 0, monthlyCost },
+      recentActivity: (recentReqs || []) as ActivityRequisition[],
+      stockAlerts: alerts as StockAlertItem[],
+      budgetChartData: Object.values(budgetMap),
+    };
+  }, []);
+
+  // Heavy queries: chart data — only on initial load, not on realtime
+  const fetchChartData = useCallback(async (oneYearAgoStr: string, startOfMonthStr: string) => {
+    const [
+      { data: timelineReqs },
+      { data: productItems },
+      { data: categoryItems },
+    ] = await Promise.all([
+      // Timeline: only dates + totals from requisitions (no item joins)
+      supabase.from('requisitions')
+        .select('created_at, total_cost')
+        .neq('status', 'CANCELADA')
+        .gte('created_at', oneYearAgoStr),
+
+      // Top products: item-level for 12 months, no categories join
+      supabase.from('requisition_items')
+        .select('inventory_item_id, quantity, unit_cost, inventory_items!inner(name, code), requisitions!inner(created_at, status)')
+        .neq('requisitions.status', 'CANCELADA')
+        .gte('requisitions.created_at', oneYearAgoStr),
+
+      // Categories: current month only (much smaller dataset)
+      supabase.from('requisition_items')
+        .select('quantity, unit_cost, inventory_items!inner(categories(name)), requisitions!inner(created_at, status)')
+        .neq('requisitions.status', 'CANCELADA')
+        .gte('requisitions.created_at', startOfMonthStr),
+    ]);
+
+    return { timelineReqs, productItems, categoryItems };
+  }, []);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
-      setIsLoading(true);
+      setState(prev => ({ ...prev, isLoading: true }));
 
-      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-      const oneYearAgo = new Date();
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const oneYearAgo = new Date(now);
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
       const oneYearAgoStr = oneYearAgo.toISOString();
 
       try {
-        // Querying all data in parallel
-        const [
-          { count: prodCount },
-          { data: budgets },
-          { count: reqCount },
-          { data: reqsMonth },
-          { data: recentReqs },
-          { data: items },
-          { data: histReqs },
-          { data: areasWithBudgets }
-        ] = await Promise.all([
-          supabase.from('inventory_items').select('*', { count: 'exact', head: true }).eq('status', 'ACTIVE'),
-          supabase.from('area_budgets').select('monthly_budget'),
-          supabase.from('requisitions').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth),
-          supabase.from('requisitions').select('total_cost, area_name').neq('status', 'CANCELADA').gte('created_at', startOfMonth),
-          supabase.from('requisitions').select('id, consecutive, created_at, status, area_name').order('created_at', { ascending: false }).limit(5),
-          supabase.from('inventory_items').select('id, name, code, quantity, committed_quantity, min_stock, max_stock, price, status').eq('status', 'ACTIVE'),
-          supabase.from('requisitions').select(`
-            id, 
-            area_name, 
-            created_at,
-            status,
-            total_cost,
-            requisition_items ( id, inventory_item_id, quantity, unit_cost, inventory_items(name, code, categories(name)) )
-          `).neq('status', 'CANCELADA').gte('created_at', oneYearAgoStr),
-          supabase.from('areas').select('name, area_budgets ( monthly_budget )')
+        // Run live metrics and chart data in parallel
+        const [liveData, chartData] = await Promise.all([
+          fetchLiveMetrics(),
+          fetchChartData(oneYearAgoStr, startOfMonth),
         ]);
 
-        // Process Metrics
-        const totalBudget = budgets?.reduce((acc, b) => acc + (Number(b.monthly_budget) || 0), 0) || 0;
-        const monthlyCost = reqsMonth?.reduce((acc, r) => acc + (Number(r.total_cost) || 0), 0) || 0;
+        const { timelineReqs, productItems, categoryItems } = chartData;
 
-        // Process Valuation & Alerts
-        const totalInventoryValue = items?.reduce((acc, item) => acc + ((item.quantity || 0) * (item.price || 0)), 0) || 0;
-        const alerts = items?.filter(item => {
-          const available = (item.quantity || 0) - (item.committed_quantity || 0);
-          return available <= (item.min_stock || 0);
-        }).sort((a, b) => ((a.quantity || 0) - (a.committed_quantity || 0)) - ((b.quantity || 0) - (b.committed_quantity || 0))).slice(0, 10) || [];
-
-        setMetrics({
-          totalProducts: prodCount || 0,
-          totalInventoryValue,
-          totalBudget,
-          totalRequisitionsMTD: reqCount || 0,
-          monthlyCost
-        });
-        setRecentActivity(recentReqs || []);
-        setStockAlerts(alerts);
-
-        if (histReqs) {
-          const timelineMap: Record<string, number> = {};
-          const prodMap: Record<string, { code: string, name: string, cost: number }> = {};
-          const catMap: Record<string, number> = {};
-
-          for (let i = 11; i >= 0; i--) {
-            const d = new Date();
-            d.setMonth(d.getMonth() - i);
-            timelineMap[d.toLocaleString('es-ES', { month: 'short', year: 'numeric' })] = 0;
-          }
-
-          const now = new Date();
-          const currentYear = now.getFullYear();
-          const currentMonth = now.getMonth();
-
-          histReqs.forEach((req) => {
-            const d = new Date(req.created_at);
-            const monthKey = d.toLocaleString('es-ES', { month: 'short', year: 'numeric' });
-            if (timelineMap[monthKey] !== undefined) timelineMap[monthKey] += (Number(req.total_cost) || 0);
-
-            req.requisition_items?.forEach((item) => {
-              const pid = item.inventory_item_id;
-              const cost = (item.quantity || 0) * (item.unit_cost || 0);
-              const inv = item.inventory_items as { code?: string; name?: string; categories?: { name?: string } } | null;
-              if (!prodMap[pid]) prodMap[pid] = { code: inv?.code || 'N/A', name: inv?.name || 'Item', cost: 0 };
-              prodMap[pid].cost += cost;
-
-              if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
-                const catName = inv?.categories?.name || 'Sin Categoría';
-                catMap[catName] = (catMap[catName] || 0) + cost;
-              }
-            });
-          });
-
-          setTimelineChartData(Object.entries(timelineMap).map(([mes, consumo]) => ({ mes: mes.charAt(0).toUpperCase() + mes.slice(1), consumo })));
-          setProductChartData(Object.values(prodMap).sort((a, b) => b.cost - a.cost).slice(0, 15));
-          setCategoryChartData(Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value));
+        // Build timeline map
+        const timelineMap: Record<string, number> = {};
+        for (let i = 11; i >= 0; i--) {
+          const d = new Date();
+          d.setMonth(d.getMonth() - i);
+          timelineMap[d.toLocaleString('es-ES', { month: 'short', year: 'numeric' })] = 0;
         }
-
-        const budgetMap: Record<string, BudgetChartRow> = {};
-        areasWithBudgets?.forEach((area) => {
-          const bdg = area.area_budgets?.[0]?.monthly_budget || 0;
-          if (bdg > 0) budgetMap[area.name] = { name: area.name, presupuesto: Number(bdg), consumido: 0 };
+        timelineReqs?.forEach(req => {
+          const key = new Date(req.created_at).toLocaleString('es-ES', { month: 'short', year: 'numeric' });
+          if (key in timelineMap) timelineMap[key] += Number(req.total_cost) || 0;
         });
 
-        reqsMonth?.forEach((req) => {
-          if (req.area_name) {
-            if (!budgetMap[req.area_name]) budgetMap[req.area_name] = { name: req.area_name, presupuesto: 0, consumido: 0 };
-            budgetMap[req.area_name].consumido += Number(req.total_cost || 0);
-          }
+        // Build top products map
+        const prodMap: Record<string, { code: string; name: string; cost: number }> = {};
+        productItems?.forEach(item => {
+          const inv = item.inventory_items as unknown as { name: string; code: string };
+          const pid = item.inventory_item_id;
+          const cost = (item.quantity || 0) * (item.unit_cost || 0);
+          if (!prodMap[pid]) prodMap[pid] = { code: inv?.code || 'N/A', name: inv?.name || 'Item', cost: 0 };
+          prodMap[pid].cost += cost;
         });
 
-        setBudgetChartData(Object.values(budgetMap));
+        // Build categories map
+        const catMap: Record<string, number> = {};
+        categoryItems?.forEach(item => {
+          const inv = item.inventory_items as unknown as { categories?: { name: string } | null };
+          const catName = inv?.categories?.name || 'Sin Categoría';
+          catMap[catName] = (catMap[catName] || 0) + (item.quantity || 0) * (item.unit_cost || 0);
+        });
+
+        // Single setState = 1 re-render total
+        setState({
+          isLoading: false,
+          ...liveData,
+          timelineChartData: Object.entries(timelineMap).map(([mes, consumo]) => ({
+            mes: mes.charAt(0).toUpperCase() + mes.slice(1),
+            consumo,
+          })),
+          productChartData: Object.values(prodMap).sort((a, b) => b.cost - a.cost).slice(0, 15),
+          categoryChartData: Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+        });
       } catch (err) {
         console.error('Data fetching error:', err);
-      } finally {
-        setIsLoading(false);
+        setState(prev => ({ ...prev, isLoading: false }));
       }
     };
 
     fetchDashboardData();
 
+    // Realtime: only refetch fast metrics, NOT the heavy chart data
     const channel = supabase
       .channel('dashboard-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'requisitions' },
-        () => {
-          fetchDashboardData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'inventory_items' },
-        () => {
-          fetchDashboardData();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'requisitions' }, async () => {
+        const liveData = await fetchLiveMetrics();
+        setState(prev => ({ ...prev, ...liveData }));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items' }, async () => {
+        const liveData = await fetchLiveMetrics();
+        setState(prev => ({ ...prev, ...liveData }));
+      })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchLiveMetrics, fetchChartData]);
+
+  const { isLoading, metrics, recentActivity, stockAlerts, timelineChartData, productChartData, budgetChartData, categoryChartData } = state;
 
   const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
+    const diffMs = Date.now() - new Date(dateString).getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
-
     if (diffMins < 60) return `hace ${diffMins} min`;
     if (diffHours < 24) return `hace ${diffHours} hr`;
-    if (diffDays === 1) return `ayer`;
+    if (diffDays === 1) return 'ayer';
     return `hace ${diffDays} días`;
   };
 
@@ -313,7 +341,6 @@ export default function DashboardPage() {
                   stockAlerts.map((item) => {
                     const available = item.quantity - (item.committed_quantity || 0);
                     const isZero = available <= 0;
-
                     return (
                       <div key={item.id} className="flex items-center justify-between group p-2 hover:bg-red-50 -mx-2 transition-colors border-l-2 border-transparent hover:border-red-400">
                         <div>
@@ -342,7 +369,7 @@ export default function DashboardPage() {
           {/* ADVANCED CHARTS SECTION */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
 
-            {/* Table 1: Top 15 Products (12 Months) */}
+            {/* Table: Top 15 Products (12 Months) */}
             <div className="bg-white border border-gray-100 shadow-sm col-span-1 lg:col-span-2">
               <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
                 <h2 className="text-xs font-bold text-white uppercase tracking-widest">Top 15 Productos por Consumo USD (Últimos 12 Meses)</h2>
@@ -377,7 +404,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Chart 2: Consumption by Category (PieChart) */}
+            {/* Chart: Consumption by Category (Current Month) */}
             <div className="bg-white border border-gray-100 shadow-sm">
               <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
                 <h2 className="text-xs font-bold text-white uppercase tracking-widest">Consumo por Categoría (Mes Actual)</h2>
@@ -448,13 +475,13 @@ export default function DashboardPage() {
                       </div>
                     );
                   })() : (
-                    <div className="flex items-center justify-center h-full text-gray-400 text-sm">No hay datos históricos por categoría.</div>
+                    <div className="flex items-center justify-center h-full text-gray-400 text-sm">No hay datos de consumo para el mes actual.</div>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Chart 3: Budget vs Actuals (Current Month) */}
+            {/* Chart: Budget vs Actuals (Current Month) */}
             <div className="bg-white border border-gray-100 shadow-sm">
               <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
                 <h2 className="text-xs font-bold text-white uppercase tracking-widest">Presupuesto vs Consumo (Mes Actual)</h2>
@@ -463,10 +490,7 @@ export default function DashboardPage() {
                 <div className="h-[350px] w-full">
                   {budgetChartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={budgetChartData}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                      >
+                      <BarChart data={budgetChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                         <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} />
                         <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
@@ -487,7 +511,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Chart 4: Consumption Timeline (12 Months) */}
+            {/* Chart: Consumption Timeline (12 Months) */}
             <div className="bg-white border border-gray-100 shadow-sm col-span-1 lg:col-span-2">
               <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
                 <h2 className="text-xs font-bold text-white uppercase tracking-widest">Consumo por Mes (Últimos 12 Meses)</h2>
@@ -496,10 +520,7 @@ export default function DashboardPage() {
                 <div className="h-[350px] w-full">
                   {timelineChartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={timelineChartData}
-                        margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
-                      >
+                      <LineChart data={timelineChartData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                         <XAxis dataKey="mes" stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} />
                         <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
