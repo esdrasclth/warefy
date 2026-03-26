@@ -388,16 +388,19 @@ export default function DashboardPage() {
                     const CAT_COLORS = ['#001d3d', '#1e40af', '#2563eb', '#0891b2', '#0d9488', '#059669', '#d97706', '#dc2626', '#7c3aed', '#db2777', '#65a30d', '#ea580c'];
                     const total = categoryChartData.reduce((sum, d) => sum + d.value, 0);
                     const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: {
-                      cx: number; cy: number; midAngle: number; innerRadius: number; outerRadius: number; percent: number;
+                      cx?: number; cy?: number; midAngle?: number; innerRadius?: number; outerRadius?: number; percent?: number;
                     }) => {
-                      if (percent < 0.05) return null;
+                      if ((percent ?? 0) < 0.05) return null;
                       const RADIAN = Math.PI / 180;
-                      const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                      const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                      const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                      const ri = innerRadius ?? 0;
+                      const ro = outerRadius ?? 0;
+                      const angle = midAngle ?? 0;
+                      const radius = ri + (ro - ri) * 0.5;
+                      const x = (cx ?? 0) + radius * Math.cos(-angle * RADIAN);
+                      const y = (cy ?? 0) + radius * Math.sin(-angle * RADIAN);
                       return (
                         <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight="bold">
-                          {`${(percent * 100).toFixed(1)}%`}
+                          {`${((percent ?? 0) * 100).toFixed(1)}%`}
                         </text>
                       );
                     };
