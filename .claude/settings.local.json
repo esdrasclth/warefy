@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"C:\\\\Projects\\\\warefyProjects\\\\warefy/app/\\(dashboard\\)\")",
+      "Bash(ls -la \"C:\\\\Projects\\\\warefyProjects\\\\warefy/app/\\(dashboard\\)/dashboard\")",
+      "Bash(find C:ProjectswarefyProjectswarefy -type f -name .env*)",
+      "Bash(find C:ProjectswarefyProjectswarefy -type f -name *email* -o -name *mail* -o -name *cron* -o -name *schedule*)",
+      "Bash(npm install:*)"
+    ]
+  }
+}

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts';
 import type { InventoryItem, Requisition, RequisitionItem } from '@/types';
 
-interface ActivityRequisition extends Pick<Requisition, 'id' | 'created_at' | 'status' | 'area_name'> { }
+interface ActivityRequisition extends Pick<Requisition, 'id' | 'consecutive' | 'created_at' | 'status' | 'area_name'> { }
 
 interface StockAlertItem extends InventoryItem {
   minimum_stock?: number;
@@ -78,7 +78,7 @@ export default function DashboardPage() {
           supabase.from('area_budgets').select('monthly_budget'),
           supabase.from('requisitions').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth),
           supabase.from('requisitions').select('total_cost, area_name').neq('status', 'CANCELADA').gte('created_at', startOfMonth),
-          supabase.from('requisitions').select('id, created_at, status, area_name').order('created_at', { ascending: false }).limit(5),
+          supabase.from('requisitions').select('id, consecutive, created_at, status, area_name').order('created_at', { ascending: false }).limit(5),
           supabase.from('inventory_items').select('id, name, code, quantity, committed_quantity, min_stock, max_stock, price, status').eq('status', 'ACTIVE'),
           supabase.from('requisitions').select(`
             id, 
@@ -123,6 +123,10 @@ export default function DashboardPage() {
             timelineMap[d.toLocaleString('es-ES', { month: 'short', year: 'numeric' })] = 0;
           }
 
+          const now = new Date();
+          const currentYear = now.getFullYear();
+          const currentMonth = now.getMonth();
+
           histReqs.forEach((req) => {
             const d = new Date(req.created_at);
             const monthKey = d.toLocaleString('es-ES', { month: 'short', year: 'numeric' });
@@ -135,8 +139,10 @@ export default function DashboardPage() {
               if (!prodMap[pid]) prodMap[pid] = { code: inv?.code || 'N/A', name: inv?.name || 'Item', cost: 0 };
               prodMap[pid].cost += cost;
 
-              const catName = inv?.categories?.name || 'Sin Categoría';
-              catMap[catName] = (catMap[catName] || 0) + cost;
+              if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+                const catName = inv?.categories?.name || 'Sin Categoría';
+                catMap[catName] = (catMap[catName] || 0) + cost;
+              }
             });
           });
 
@@ -275,7 +281,7 @@ export default function DashboardPage() {
                         <div className="h-8 w-1 bg-transparent group-hover:bg-white/30 transition-colors rounded"></div>
                         <div>
                           <p className="text-sm font-semibold text-primary group-hover:text-blue-600 transition-colors">
-                            REQ-{req.id.split('-')[0]}
+                            REQ-{String(req.consecutive || 0).padStart(6, '0')}
                           </p>
                           <p className="text-xs text-gray-400 mt-1">{req.created_at ? formatTimeAgo(req.created_at) : '-'} • {req.area_name}</p>
                         </div>
@@ -374,41 +380,71 @@ export default function DashboardPage() {
             {/* Chart 2: Consumption by Category (PieChart) */}
             <div className="bg-white border border-gray-100 shadow-sm">
               <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
-                <h2 className="text-xs font-bold text-white uppercase tracking-widest">Consumo por Categoría (12 Meses)</h2>
+                <h2 className="text-xs font-bold text-white uppercase tracking-widest">Consumo por Categoría (Mes Actual)</h2>
               </div>
               <div className="p-6">
-                <div className="h-[350px] w-full">
-                  {categoryChartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                        <Pie
-                          data={categoryChartData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={120}
-                          paddingAngle={2}
-                        >
+                <div className="h-[400px] w-full">
+                  {categoryChartData.length > 0 ? (() => {
+                    const CAT_COLORS = ['#001d3d', '#1e40af', '#2563eb', '#0891b2', '#0d9488', '#059669', '#d97706', '#dc2626', '#7c3aed', '#db2777', '#65a30d', '#ea580c'];
+                    const total = categoryChartData.reduce((sum, d) => sum + d.value, 0);
+                    const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: {
+                      cx: number; cy: number; midAngle: number; innerRadius: number; outerRadius: number; percent: number;
+                    }) => {
+                      if (percent < 0.05) return null;
+                      const RADIAN = Math.PI / 180;
+                      const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                      const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                      const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                      return (
+                        <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight="bold">
+                          {`${(percent * 100).toFixed(1)}%`}
+                        </text>
+                      );
+                    };
+                    return (
+                      <div className="flex gap-4 h-full">
+                        <div className="flex-1 min-w-0">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={categoryChartData}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={70}
+                                outerRadius={130}
+                                paddingAngle={2}
+                                labelLine={false}
+                                label={renderCustomLabel}
+                              >
+                                {categoryChartData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={CAT_COLORS[index % CAT_COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total Consumido']}
+                                contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb', fontSize: '12px' }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="flex flex-col justify-center gap-1.5 min-w-[220px] max-w-[240px] overflow-y-auto pr-1">
                           {categoryChartData.map((entry, index) => {
-                            const COLORS = ['#001d3d', '#1e40af', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#1e293b'];
-                            return <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />;
+                            const pct = total > 0 ? (entry.value / total) * 100 : 0;
+                            return (
+                              <div key={entry.name} className="flex items-center gap-2 text-xs">
+                                <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: CAT_COLORS[index % CAT_COLORS.length] }} />
+                                <span className="flex-1 truncate text-gray-700 font-medium">{entry.name}</span>
+                                <span className="text-gray-500 whitespace-nowrap">{pct.toFixed(1)}%</span>
+                                <span className="text-gray-900 font-semibold whitespace-nowrap">${entry.value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                              </div>
+                            );
                           })}
-                        </Pie>
-                        <Tooltip
-                          formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total Consumido']}
-                          contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb' }}
-                        />
-                        <Legend
-                          layout="vertical"
-                          verticalAlign="middle"
-                          align="right"
-                          wrapperStyle={{ fontSize: '12px', paddingLeft: '20px' }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  ) : (
+                        </div>
+                      </div>
+                    );
+                  })() : (
                     <div className="flex items-center justify-center h-full text-gray-400 text-sm">No hay datos históricos por categoría.</div>
                   )}
                 </div>
