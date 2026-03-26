@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Loader2, Search, Plus, Trash2, X, UserPlus, Building2 } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Search, Trash2, X, UserPlus, Building2, Printer } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 
@@ -29,10 +29,30 @@ interface Supplier {
   email?: string;
 }
 
+interface ReportItem {
+  code: string;
+  name: string;
+  quantitySolicited: number;
+  currentStock: number;
+  avgMonthlyConsumption: number;
+  avgWeeklyConsumption: number;
+  coverageWeeksCurrent: number | null;
+  coverageWeeksWithPurchase: number | null;
+  lastPurchaseDate: string | null;
+}
+
+interface ReportData {
+  consecutive: number;
+  date: string;
+  supplierName: string;
+  total: number;
+  manualRef: string | null;
+  items: ReportItem[];
+}
+
 export default function NuevaCompraView() {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
-
 
   // Supplier State
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -50,6 +70,11 @@ export default function NuevaCompraView() {
   // Comments
   const [comments, setComments] = useState('');
   const [manualRequisitionNumber, setManualRequisitionNumber] = useState('');
+
+  // Report modal
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [isLoadingReport, setIsLoadingReport] = useState(false);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
 
   // 1. Search Suppliers
   useEffect(() => {
@@ -85,7 +110,6 @@ export default function NuevaCompraView() {
     }, 300);
     return () => clearTimeout(timer);
   }, [itemSearch]);
-
 
   const handleSelectItem = (item: InventoryItem) => {
     const exists = selectedItems.find(si => si.inventoryItem.id === item.id);
@@ -143,10 +167,89 @@ export default function NuevaCompraView() {
       const { error: piError } = await supabase.from('purchase_items').insert(itemsToInsert);
       if (piError) throw piError;
 
-      router.push('/compras');
+      // Fetch report data
+      setIsLoadingReport(true);
+      setShowReportModal(true);
+
+      const itemIds = selectedItems.map(si => si.inventoryItem.id);
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+      const [
+        { data: purchaseItemsData },
+        { data: movementsOut },
+        { data: movementsIn }
+      ] = await Promise.all([
+        supabase
+          .from('purchase_items')
+          .select('inventory_item_id, quantity, inventory_items(id, code, name, quantity, committed_quantity)')
+          .eq('purchase_id', pData.id),
+        supabase
+          .from('stock_movements')
+          .select('inventory_item_id, quantity')
+          .eq('movement_type', 'OUT')
+          .in('inventory_item_id', itemIds)
+          .gte('created_at', ninetyDaysAgo.toISOString()),
+        supabase
+          .from('stock_movements')
+          .select('inventory_item_id, created_at')
+          .eq('movement_type', 'IN')
+          .in('inventory_item_id', itemIds)
+          .order('created_at', { ascending: false })
+      ]);
+
+      // Build maps
+      const consumptionMap: Record<string, number> = {};
+      (movementsOut || []).forEach(m => {
+        consumptionMap[m.inventory_item_id] = (consumptionMap[m.inventory_item_id] || 0) + (m.quantity || 0);
+      });
+
+      const lastInMap: Record<string, string> = {};
+      (movementsIn || []).forEach(m => {
+        if (!lastInMap[m.inventory_item_id]) lastInMap[m.inventory_item_id] = m.created_at;
+      });
+
+      const reportItems: ReportItem[] = (purchaseItemsData || []).map(pi => {
+        const inv = pi.inventory_items as unknown as { id: string; code: string; name: string; quantity: number; committed_quantity: number } | null;
+        const currentStock = (inv?.quantity || 0) - (inv?.committed_quantity || 0);
+        const totalOut90 = consumptionMap[pi.inventory_item_id] || 0;
+        const avgMonthly = Math.round((totalOut90 / 3) * 10) / 10;
+        const avgWeekly = Math.round((avgMonthly / 4.33) * 10) / 10;
+        const projectedStock = currentStock + (pi.quantity || 0);
+        const coverageWeeksCurrent = avgWeekly > 0 ? Math.round((currentStock / avgWeekly) * 10) / 10 : null;
+        const coverageWeeksWithPurchase = avgWeekly > 0 ? Math.round((projectedStock / avgWeekly) * 10) / 10 : null;
+        const lastIn = lastInMap[pi.inventory_item_id] || null;
+
+        return {
+          code: inv?.code || 'N/A',
+          name: inv?.name || 'Item',
+          quantitySolicited: pi.quantity || 0,
+          currentStock,
+          avgMonthlyConsumption: avgMonthly,
+          avgWeeklyConsumption: avgWeekly,
+          coverageWeeksCurrent,
+          coverageWeeksWithPurchase,
+          lastPurchaseDate: lastIn
+            ? new Date(lastIn).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+            : null,
+        };
+      });
+
+      setReportData({
+        consecutive: pData.consecutive,
+        date: new Date(pData.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        supplierName: selectedSupplier.name,
+        total: totalCost,
+        manualRef: manualRequisitionNumber.trim() || null,
+        items: reportItems,
+      });
+      setIsLoadingReport(false);
+
     } catch (error: any) {
       alert('Error: ' + error.message);
       setIsSaving(false);
+      setIsLoadingReport(false);
+      setShowReportModal(false);
     }
   };
 
@@ -233,9 +336,7 @@ export default function NuevaCompraView() {
                           if (confirm(`¿Estás seguro de que deseas eliminar al proveedor "${s.name}"?`)) {
                             const { error } = await supabase.from('suppliers').delete().eq('id', s.id);
                             if (error) alert('Error al eliminar: ' + error.message);
-                            else {
-                              setSupplierResults(supplierResults.filter(sr => sr.id !== s.id));
-                            }
+                            else setSupplierResults(supplierResults.filter(sr => sr.id !== s.id));
                           }
                         }}
                         className="p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
@@ -249,7 +350,6 @@ export default function NuevaCompraView() {
             </div>
           </div>
 
-
           {/* Box: Manual Reference */}
           <div className="bg-white border border-gray-100 p-6 shadow-sm">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">2. N° Talonario / Referencia Manual</h3>
@@ -260,14 +360,14 @@ export default function NuevaCompraView() {
               onChange={e => setManualRequisitionNumber(e.target.value)}
               className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 focus:bg-white focus:outline-none focus:border-primary"
             />
-            <p className="text-[10px] text-gray-400 mt-2 italic italic">Este número se visualizará en el listado para seguimiento.</p>
+            <p className="text-[10px] text-gray-400 mt-2 italic">Este número se visualizará en el listado para seguimiento.</p>
           </div>
 
           {/* Box: Comments */}
           <div className="bg-white border border-gray-100 p-6 shadow-sm">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">3. Comentarios</h3>
             <textarea
-              placeholder="Notas internas sobra la compra..."
+              placeholder="Notas internas sobre la compra..."
               value={comments}
               onChange={e => setComments(e.target.value)}
               className="w-full h-32 p-3 text-sm bg-gray-50 border border-gray-200 focus:bg-white focus:outline-none focus:border-primary resize-none"
@@ -297,7 +397,6 @@ export default function NuevaCompraView() {
                 />
               </div>
 
-              {/* Item Results */}
               {itemResults.length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl z-50 max-h-60 overflow-y-auto">
                   {itemResults.map(item => (
@@ -385,7 +484,7 @@ export default function NuevaCompraView() {
                 </div>
                 <div className="flex justify-between w-64 text-xl font-bold text-primary">
                   <span>TOTAL USD:</span>
-                  <span className="text-primary">${selectedItems.reduce((acc, curr) => acc + (curr.quantity * curr.unitCost), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <span>${selectedItems.reduce((acc, curr) => acc + (curr.quantity * curr.unitCost), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
             )}
@@ -401,10 +500,286 @@ export default function NuevaCompraView() {
           onCreated={(s) => { setSelectedSupplier(s); setShowNewSupplierModal(false); }}
         />
       )}
+
+      {/* Authorization Report Modal */}
+      {showReportModal && (
+        <AuthorizationReportModal
+          isLoading={isLoadingReport}
+          reportData={reportData}
+          onClose={() => router.push('/compras')}
+        />
+      )}
     </div>
   );
 }
 
+/* ─────────────────────────────────────────────
+   Authorization Report Modal
+───────────────────────────────────────────── */
+function AuthorizationReportModal({
+  isLoading,
+  reportData,
+  onClose,
+}: {
+  isLoading: boolean;
+  reportData: ReportData | null;
+  onClose: () => void;
+}) {
+  const printedAt = new Date().toLocaleString('es-ES', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+
+  const handlePrint = () => {
+    if (!reportData) return;
+
+    const coverageColor = (val: number | null) =>
+      val === null ? '#6b7280' : val < 2 ? '#dc2626' : val < 4 ? '#d97706' : '#16a34a';
+
+    const rows = reportData.items.map((item, i) => `
+      <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'}">
+        <td style="font-family:monospace">${item.code}</td>
+        <td style="font-weight:600">${item.name}</td>
+        <td style="text-align:center;font-weight:700;color:#1e40af">${item.quantitySolicited}</td>
+        <td style="text-align:center">${item.currentStock}</td>
+        <td style="text-align:center">${item.avgMonthlyConsumption}</td>
+        <td style="text-align:center">${item.avgWeeklyConsumption}</td>
+        <td style="text-align:center;font-weight:700;color:${coverageColor(item.coverageWeeksCurrent)}">
+          ${item.coverageWeeksCurrent === null ? '∞' : `${item.coverageWeeksCurrent} sem.`}
+        </td>
+        <td style="text-align:center;font-weight:700;color:${coverageColor(item.coverageWeeksWithPurchase)}">
+          ${item.coverageWeeksWithPurchase === null ? '∞' : `${item.coverageWeeksWithPurchase} sem.`}
+        </td>
+        <td style="text-align:center;color:#6b7280">${item.lastPurchaseDate || 'Sin historial'}</td>
+      </tr>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>COM-${String(reportData.consecutive).padStart(6, '0')} — Warefy</title>
+  <style>
+    @page { size: letter landscape; margin: 1cm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 10pt; color: #111; background: white; }
+    .header { background: #001d3d; color: white; padding: 14px 20px; margin-bottom: 16px; }
+    .header h1 { font-size: 13pt; font-weight: bold; text-transform: uppercase; letter-spacing: .05em; }
+    .header p { font-size: 8pt; color: rgba(255,255,255,.7); margin-top: 3px; }
+    .meta { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; background: #f9fafb; border: 1px solid #e5e7eb; padding: 12px 16px; margin-bottom: 16px; }
+    .meta-item label { display: block; font-size: 7pt; font-weight: bold; color: #9ca3af; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+    .meta-item span { font-size: 10pt; font-weight: 600; color: #111; }
+    .meta-item .big { font-size: 12pt; font-weight: 800; color: #001d3d; }
+    .meta-ref { grid-column: 1 / -1; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+    th { background: #001d3d; color: white; padding: 7px 8px; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; border: 1px solid #001d3d; text-align: center; }
+    th:first-child, th:nth-child(2) { text-align: left; }
+    td { padding: 6px 8px; border: 1px solid #d1d5db; vertical-align: middle; }
+    .signatures { display: grid; grid-template-columns: repeat(3,1fr); gap: 40px; margin-top: 40px; }
+    .sig-line { border-bottom: 1px solid #9ca3af; height: 36px; margin-bottom: 6px; }
+    .sig-label { text-align: center; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; }
+    .footer { text-align: right; font-size: 7pt; color: #d1d5db; margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Warefy — Reporte de Autorización de Compra</h1>
+    <p>Generado el ${printedAt}</p>
+  </div>
+  <div class="meta">
+    <div class="meta-item">
+      <label>N° Compra</label>
+      <span class="big">COM-${String(reportData.consecutive).padStart(6, '0')}</span>
+    </div>
+    <div class="meta-item">
+      <label>Fecha</label>
+      <span>${reportData.date}</span>
+    </div>
+    <div class="meta-item">
+      <label>Proveedor</label>
+      <span>${reportData.supplierName}</span>
+    </div>
+    <div class="meta-item">
+      <label>Total</label>
+      <span class="big">$${reportData.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+    </div>
+    ${reportData.manualRef ? `<div class="meta-item meta-ref"><label>Referencia / Talonario</label><span>${reportData.manualRef}</span></div>` : ''}
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Descripción</th>
+        <th>Cant. Solicitada</th>
+        <th>Inv. Actual</th>
+        <th>Cons. Mensual Prom.</th>
+        <th>Cons. Semanal Prom.</th>
+        <th>Sem. Disponibles</th>
+        <th>Sem. a Cubrir</th>
+        <th>Última Compra</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="signatures">
+    ${['Solicitado por', 'Revisado por', 'Autorizado por'].map(l => `
+      <div><div class="sig-line"></div><div class="sig-label">${l}</div></div>`).join('')}
+  </div>
+  <div class="footer">Documento generado por Warefy · ${printedAt}</div>
+  <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }<\/script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=900,height=650');
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex flex-col">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-6 py-3 bg-primary text-white flex-shrink-0">
+        <span className="text-sm font-bold uppercase tracking-widest">Reporte de Autorización de Compra</span>
+        <div className="flex gap-3">
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-2 bg-white text-primary px-4 py-2 text-xs font-bold uppercase tracking-widest hover:bg-gray-100 transition-colors"
+          >
+            <Printer size={14} /> Imprimir
+          </button>
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 border border-white/40 text-white px-4 py-2 text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-colors"
+            >
+              <X size={14} /> Cerrar
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="report-scroll-container flex-1 overflow-y-auto bg-gray-100 p-6">
+          <div id="authorization-report-print" className="bg-white max-w-5xl mx-auto shadow-sm">
+
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center h-64 gap-4">
+                <Loader2 size={32} className="animate-spin text-primary" />
+                <p className="text-sm text-gray-400">Generando reporte...</p>
+              </div>
+            ) : reportData ? (
+              <>
+                {/* Report Header */}
+                <div className="bg-primary p-6 text-white">
+                  <h1 className="text-xl font-bold uppercase tracking-widest">Warefy — Reporte de Autorización de Compra</h1>
+                  <p className="text-sm text-white/70 mt-1">Generado el {printedAt}</p>
+                </div>
+
+                <div className="p-6">
+                  {/* Purchase Meta */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8 border border-gray-100 p-4 bg-gray-50">
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">N° Compra</p>
+                      <p className="text-lg font-bold text-primary mt-0.5">COM-{String(reportData.consecutive).padStart(6, '0')}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fecha</p>
+                      <p className="text-sm font-semibold text-gray-800 mt-0.5">{reportData.date}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Proveedor</p>
+                      <p className="text-sm font-semibold text-gray-800 mt-0.5">{reportData.supplierName}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</p>
+                      <p className="text-lg font-bold text-primary mt-0.5">
+                        ${reportData.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    {reportData.manualRef && (
+                      <div className="col-span-2 sm:col-span-4 border-t border-gray-200 pt-3 mt-1">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Referencia / Talonario</p>
+                        <p className="text-sm font-semibold text-gray-800 mt-0.5">{reportData.manualRef}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Items Table */}
+                  <div className="report-table-container overflow-x-auto">
+                    <table className="w-full border-collapse text-left">
+                      <thead>
+                        <tr className="bg-primary text-white">
+                          <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary">Código</th>
+                          <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary">Descripción</th>
+                          <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">Cant. Solicitada</th>
+                          <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">Inv. Actual</th>
+                          <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">Cons. Mensual Prom.</th>
+                          <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">Cons. Semanal Prom.</th>
+                          <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">Sem. Disponibles</th>
+                          <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">Sem. a Cubrir</th>
+                          <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">Última Compra</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportData.items.map((item, i) => (
+                          <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="px-3 py-2.5 text-xs font-mono text-gray-600 border border-gray-200">{item.code}</td>
+                            <td className="px-3 py-2.5 text-xs font-semibold text-gray-800 border border-gray-200">{item.name}</td>
+                            <td className="px-3 py-2.5 text-xs text-center font-bold text-primary border border-gray-200">{item.quantitySolicited}</td>
+                            <td className="px-3 py-2.5 text-xs text-center text-gray-700 border border-gray-200">{item.currentStock}</td>
+                            <td className="px-3 py-2.5 text-xs text-center text-gray-700 border border-gray-200">{item.avgMonthlyConsumption}</td>
+                            <td className="px-3 py-2.5 text-xs text-center text-gray-700 border border-gray-200">{item.avgWeeklyConsumption}</td>
+                            <td className="px-3 py-2.5 text-xs text-center font-bold border border-gray-200">
+                              <span className={
+                                item.coverageWeeksCurrent === null ? 'text-gray-400' :
+                                item.coverageWeeksCurrent < 2 ? 'text-red-600' :
+                                item.coverageWeeksCurrent < 4 ? 'text-amber-600' : 'text-green-600'
+                              }>
+                                {item.coverageWeeksCurrent === null ? '∞' : `${item.coverageWeeksCurrent} sem.`}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-xs text-center font-bold border border-gray-200">
+                              <span className={
+                                item.coverageWeeksWithPurchase === null ? 'text-gray-400' :
+                                item.coverageWeeksWithPurchase < 2 ? 'text-red-600' :
+                                item.coverageWeeksWithPurchase < 4 ? 'text-amber-600' : 'text-green-600'
+                              }>
+                                {item.coverageWeeksWithPurchase === null ? '∞' : `${item.coverageWeeksWithPurchase} sem.`}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-xs text-center text-gray-500 border border-gray-200">
+                              {item.lastPurchaseDate || 'Sin historial'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Signature area */}
+                  <div className="grid grid-cols-3 gap-8 mt-12 pt-6">
+                    {['Solicitado por', 'Revisado por', 'Autorizado por'].map(label => (
+                      <div key={label} className="text-center">
+                        <div className="border-b border-gray-400 mb-2 h-10" />
+                        <p className="text-[10px] text-gray-500 uppercase tracking-widest">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Print footer */}
+                  <p className="text-[10px] text-gray-300 text-right mt-8">
+                    Documento generado por Warefy · {printedAt}
+                  </p>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Supplier Modal
+───────────────────────────────────────────── */
 function SupplierModal({ onClose, onCreated }: { onClose: () => void, onCreated: (s: Supplier) => void }) {
   const [name, setName] = useState('');
   const [taxId, setTaxId] = useState('');
@@ -415,7 +790,6 @@ function SupplierModal({ onClose, onCreated }: { onClose: () => void, onCreated:
     if (!name.trim()) return;
     setIsSaving(true);
     try {
-      // 1. Check for duplicates
       const { data: existing, error: checkError } = await supabase
         .from('suppliers')
         .select('id, name')
@@ -430,7 +804,6 @@ function SupplierModal({ onClose, onCreated }: { onClose: () => void, onCreated:
         return;
       }
 
-      // 2. Insert if not duplicate
       const { data, error } = await supabase
         .from('suppliers')
         .insert({ name: name.trim(), tax_id: taxId.trim(), email: email.trim() })
