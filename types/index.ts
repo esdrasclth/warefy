@@ -55,6 +55,7 @@ export interface InventoryItem {
   status: 'ACTIVE' | 'INACTIVE';
   category_id?: string;
   unit_id?: string;
+  image_url?: string | null;
   created_at?: string;
   updated_at?: string;
   categories?: Category;

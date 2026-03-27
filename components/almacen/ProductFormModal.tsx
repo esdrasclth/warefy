@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { X, Plus, Save, Loader2 } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
+import ImageUpload from '@/components/inventory/ImageUpload';
 
 export interface Category { id: string; name: string; }
 export interface Unit { id: string; name: string; abbreviation?: string; }
@@ -18,6 +19,7 @@ export interface ProductData {
   max_stock: number;
   price: number;
   status: 'ACTIVE' | 'INACTIVE';
+  image_url?: string | null;
 }
 
 interface ProductFormModalProps {
@@ -76,6 +78,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
       setFormData(productToEdit);
     } else {
       setFormData({
+        id: crypto.randomUUID(), // pre-generar ID para poder subir imagen antes de guardar
         code: '', name: '', category_id: '', unit_id: '',
         quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE'
       });
@@ -154,9 +157,14 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
     let error;
 
     if (formData.id) {
-      // Update
-      const { id, ...updateData } = formData;
-      const res = await supabase.from('inventory_items').update(updateData).eq('id', id);
+      // Update via RPC (evita CORS con PATCH directo)
+      // excluir image_url (se maneja por la API de imágenes)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id, image_url, ...updateData } = formData;
+      const res = await supabase.rpc('update_inventory_item', {
+        p_id: id,
+        p_updates: updateData,
+      });
       error = res.error;
     } else {
       // Insert
@@ -358,6 +366,21 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                     <input 
                       value={formData.max_stock} onChange={e => handleChange('max_stock', Number(e.target.value))}
                       type="number" className="w-full border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors" 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Imagen del producto — al final, centrada */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">Imagen del Producto</h3>
+                <div className="flex justify-center">
+                  <div className="w-48">
+                    <ImageUpload
+                      inventoryItemId={formData.id!}
+                      currentImageUrl={formData.image_url ?? null}
+                      canEdit={true}
+                      onImageUpdated={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
                     />
                   </div>
                 </div>

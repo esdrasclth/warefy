@@ -128,6 +128,7 @@ export default function AlmacenPage() {
       max_stock: product.max_stock,
       price: product.price,
       status: product.status,
+      image_url: product.image_url,
     });
     setIsModalOpen(true);
   };
