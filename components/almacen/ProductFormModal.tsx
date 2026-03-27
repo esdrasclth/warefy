@@ -156,19 +156,38 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
     setIsSaving(true);
     let error;
 
-    if (formData.id) {
+    if (productToEdit?.id) {
       // Update via RPC (evita CORS con PATCH directo)
-      // excluir image_url (se maneja por la API de imágenes)
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id, image_url, ...updateData } = formData;
       const res = await supabase.rpc('update_inventory_item', {
-        p_id: id,
-        p_updates: updateData,
+        p_id: productToEdit.id,
+        p_updates: {
+          code: formData.code,
+          name: formData.name,
+          category_id: formData.category_id,
+          unit_id: formData.unit_id,
+          quantity: formData.quantity,
+          min_stock: formData.min_stock,
+          max_stock: formData.max_stock,
+          price: formData.price,
+          status: formData.status,
+        },
       });
       error = res.error;
     } else {
-      // Insert
-      const res = await supabase.from('inventory_items').insert(formData);
+      // Insert — incluye el id pre-generado e image_url si se subió imagen
+      const res = await supabase.from('inventory_items').insert({
+        id: formData.id,
+        code: formData.code,
+        name: formData.name,
+        category_id: formData.category_id,
+        unit_id: formData.unit_id,
+        quantity: formData.quantity,
+        min_stock: formData.min_stock,
+        max_stock: formData.max_stock,
+        price: formData.price,
+        status: formData.status,
+        image_url: formData.image_url ?? null,
+      });
       error = res.error;
     }
 
@@ -375,7 +394,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
               <div className="space-y-4">
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">Imagen del Producto</h3>
                 <div className="flex justify-center">
-                  <div className="w-48">
+                  <div className="w-64">
                     <ImageUpload
                       inventoryItemId={formData.id!}
                       currentImageUrl={formData.image_url ?? null}
