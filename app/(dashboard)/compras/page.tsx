@@ -22,7 +22,7 @@ export default function ComprasPage() {
         *,
         suppliers ( name ),
         requisitions ( consecutive ),
-        purchase_items ( quantity, unit_cost )
+        purchase_items ( quantity, unit_cost, received_quantity, inventory_items ( name, code ) )
       `)
       .order('created_at', { ascending: false });
 
@@ -85,20 +85,81 @@ export default function ComprasPage() {
     else fetchPurchases();
   };
 
-  const exportToExcel = () => {
-    const dataToExport = filteredPurchases.map(p => ({
-      'Código': `COM-${String(p.consecutive).padStart(6, '0')}`,
-      'Proveedor': p.suppliers?.name || 'N/A',
-      'Fecha': new Date(p.created_at ?? '').toLocaleDateString(),
-      'Monto Total': p.total_cost,
-      'Estado': p.status,
-      'Comentarios': p.comments || ''
-    }));
+  const [isExporting, setIsExporting] = useState(false);
 
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Compras');
-    XLSX.writeFile(wb, `Reporte_Compras_${new Date().toISOString().split('T')[0]}.xlsx`);
+  const exportToExcel = async () => {
+    setIsExporting(true);
+    try {
+      // Fresh fetch with full detail — ensures inventory_items and received_quantity are always present
+      const { data, error } = await supabase
+        .from('purchases')
+        .select(`
+          id, consecutive, status, total_cost, comments, created_at, manual_requisition_number,
+          suppliers ( name ),
+          requisitions ( consecutive ),
+          purchase_items ( quantity, unit_cost, received_quantity, inventory_items ( name, code ) )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error || !data) throw error ?? new Error('Sin datos');
+
+      // Apply current filters
+      const q = searchQuery.toLowerCase();
+      const dataFiltered = data.filter(p => {
+        const matchesSearch =
+          String(p.consecutive).includes(q) ||
+          ((p.suppliers as any)?.name || '').toLowerCase().includes(q) ||
+          (p.comments || '').toLowerCase().includes(q);
+        const matchesStatus = statusFilter === 'TODAS' || p.status === statusFilter;
+        return matchesSearch && matchesStatus;
+      });
+
+      // Sheet 1: Resumen
+      const summary = dataFiltered.map(p => ({
+        'Código': `COM-${String(p.consecutive).padStart(6, '0')}`,
+        'Ref./Requisa': (p.requisitions as any)
+          ? `REQ-${String((p.requisitions as any).consecutive).padStart(6, '0')}`
+          : p.manual_requisition_number || '',
+        'Proveedor': (p.suppliers as any)?.name || 'N/A',
+        'Fecha': new Date(p.created_at ?? '').toLocaleDateString(),
+        'Monto Total ($)': p.total_cost,
+        'Estado': p.status,
+        'Comentarios': p.comments || '',
+      }));
+
+      // Sheet 2: Detalle de items
+      const detail: Record<string, unknown>[] = [];
+      dataFiltered.forEach(p => {
+        const codigo = `COM-${String(p.consecutive).padStart(6, '0')}`;
+        const proveedor = (p.suppliers as any)?.name || 'N/A';
+        const fecha = new Date(p.created_at ?? '').toLocaleDateString();
+        ((p.purchase_items as any[]) ?? []).forEach((item: any) => {
+          const qty = item.quantity ?? 0;
+          const unitCost = item.unit_cost ?? 0;
+          detail.push({
+            'Código Compra': codigo,
+            'Proveedor': proveedor,
+            'Fecha': fecha,
+            'Código Producto': item.inventory_items?.code || '',
+            'Producto': item.inventory_items?.name || '',
+            'Cantidad Solicitada': qty,
+            'Cantidad Recibida': item.received_quantity ?? '',
+            'Costo Unitario ($)': unitCost,
+            'Subtotal ($)': +(qty * unitCost).toFixed(2),
+            'Estado Compra': p.status,
+          });
+        });
+      });
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), 'Resumen');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), 'Detalle');
+      XLSX.writeFile(wb, `Reporte_Compras_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (err: any) {
+      alert('Error al exportar: ' + err.message);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const getStatusColor = (status: PurchaseStatus) => {
@@ -133,10 +194,11 @@ export default function ComprasPage() {
         <div className="flex gap-2">
           <button
             onClick={exportToExcel}
-            className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-5 py-3 text-sm font-semibold transition-colors shadow-sm"
+            disabled={isExporting}
+            className="flex items-center gap-2 bg-green-700 hover:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed text-white px-5 py-3 text-sm font-semibold transition-colors shadow-sm"
           >
-            <FileSpreadsheet size={16} />
-            Descargar Excel
+            {isExporting ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+            {isExporting ? 'Exportando...' : 'Descargar Excel'}
           </button>
           <Link
             href="/compras/nueva"

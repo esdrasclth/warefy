@@ -1,9 +1,9 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Package, Wallet, ClipboardList, Activity, Loader2, ArrowRight, DollarSign } from 'lucide-react';
+import { Package, Wallet, ClipboardList, Activity, Loader2, ArrowRight, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
 import type { InventoryItem, Requisition } from '@/types';
 
 interface ActivityRequisition extends Pick<Requisition, 'id' | 'consecutive' | 'created_at' | 'status' | 'area_name'> { }
@@ -46,62 +46,80 @@ interface DashboardState {
   recentActivity: ActivityRequisition[];
   stockAlerts: StockAlertItem[];
   timelineChartData: TimelineChartRow[];
-  productChartData: ProductChartRow[];
+  productChartDataByPeriod: Record<string, ProductChartRow[]>;
   budgetChartData: BudgetChartRow[];
   categoryChartData: CategoryChartRow[];
 }
 
+type ProductPeriod = '1m' | '3m' | '6m' | '12m';
+
 export default function DashboardPage() {
+  const [productPeriod, setProductPeriod] = useState<ProductPeriod>('1m');
+  const [selectedMonth, setSelectedMonth] = useState<Date>(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const now = new Date();
+  const isCurrentMonth = selectedMonth.getFullYear() === now.getFullYear() && selectedMonth.getMonth() === now.getMonth();
+  const navigateMonth = (dir: -1 | 1) => setSelectedMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + dir, 1));
   const [state, setState] = useState<DashboardState>({
     isLoading: true,
     metrics: { totalProducts: 0, totalInventoryValue: 0, totalBudget: 0, totalRequisitionsMTD: 0, monthlyCost: 0 },
     recentActivity: [],
     stockAlerts: [],
     timelineChartData: [],
-    productChartData: [],
+    productChartDataByPeriod: { '1m': [], '3m': [], '6m': [], '12m': [] },
     budgetChartData: [],
     categoryChartData: [],
   });
 
   // Fast queries: metrics, recent activity, stock alerts — called on realtime too
-  const fetchLiveMetrics = useCallback(async () => {
-    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const fetchLiveMetrics = useCallback(async (month: Date) => {
+    const monthStart = new Date(month.getFullYear(), month.getMonth(), 1).toISOString();
+    const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1).toISOString();
 
     const [
       { count: prodCount },
       { data: budgets },
       { count: reqCount },
-      { data: reqsMonth },
+      { data: deliveredItems },
       { data: recentReqs },
       { data: stockItems },
       { data: areasWithBudgets },
     ] = await Promise.all([
       supabase.from('inventory_items').select('id', { count: 'exact', head: true }).eq('status', 'ACTIVE'),
       supabase.from('area_budgets').select('monthly_budget'),
-      supabase.from('requisitions').select('id', { count: 'exact', head: true }).gte('created_at', startOfMonth),
-      supabase.from('requisitions').select('total_cost, area_name').neq('status', 'CANCELADA').gte('created_at', startOfMonth),
-      supabase.from('requisitions').select('id, consecutive, created_at, status, area_name').order('created_at', { ascending: false }).limit(5),
+      supabase.from('requisitions').select('id', { count: 'exact', head: true }).gte('created_at', monthStart).lt('created_at', monthEnd),
+      // Only ENTREGADA, using delivered_quantity for accurate cost
+      supabase.from('requisition_items')
+        .select('quantity, delivered_quantity, unit_cost, requisitions!inner(area_name, status, created_at)')
+        .eq('requisitions.status', 'ENTREGADA')
+        .gte('requisitions.created_at', monthStart)
+        .lt('requisitions.created_at', monthEnd),
+      supabase.from('requisitions').select('id, consecutive, created_at, status, area_name').gte('created_at', monthStart).lt('created_at', monthEnd).order('created_at', { ascending: false }).limit(5),
       supabase.from('inventory_items').select('id, name, code, quantity, committed_quantity, min_stock, max_stock, price, status').eq('status', 'ACTIVE'),
       supabase.from('areas').select('name, area_budgets(monthly_budget)'),
     ]);
 
     const totalBudget = budgets?.reduce((acc, b) => acc + (Number(b.monthly_budget) || 0), 0) || 0;
-    const monthlyCost = reqsMonth?.reduce((acc, r) => acc + (Number(r.total_cost) || 0), 0) || 0;
     const totalInventoryValue = stockItems?.reduce((acc, i) => acc + ((i.quantity || 0) * (i.price || 0)), 0) || 0;
     const alerts = stockItems
       ?.filter(item => (item.quantity - (item.committed_quantity || 0)) <= (item.min_stock || 0))
       .sort((a, b) => (a.quantity - (a.committed_quantity || 0)) - (b.quantity - (b.committed_quantity || 0)))
       .slice(0, 10) || [];
 
+    // Calculate monthlyCost and budgetMap from delivered items only
+    let monthlyCost = 0;
     const budgetMap: Record<string, BudgetChartRow> = {};
     areasWithBudgets?.forEach(area => {
       const bdg = (area.area_budgets as { monthly_budget: number }[] | null)?.[0]?.monthly_budget || 0;
       if (bdg > 0) budgetMap[area.name] = { name: area.name, presupuesto: Number(bdg), consumido: 0 };
     });
-    reqsMonth?.forEach(req => {
+    deliveredItems?.forEach(item => {
+      const req = item.requisitions as unknown as { area_name: string };
+      const qty = (item.delivered_quantity ?? item.quantity) || 0;
+      const cost = qty * (item.unit_cost || 0);
+      monthlyCost += cost;
       if (req.area_name) {
         if (!budgetMap[req.area_name]) budgetMap[req.area_name] = { name: req.area_name, presupuesto: 0, consumido: 0 };
-        budgetMap[req.area_name].consumido += Number(req.total_cost || 0);
+        budgetMap[req.area_name].consumido += cost;
       }
     });
 
@@ -114,84 +132,101 @@ export default function DashboardPage() {
   }, []);
 
   // Heavy queries: chart data — only on initial load, not on realtime
-  const fetchChartData = useCallback(async (oneYearAgoStr: string, startOfMonthStr: string) => {
+  const fetchChartData = useCallback(async (month: Date) => {
+    const monthStart = new Date(month.getFullYear(), month.getMonth(), 1).toISOString();
+    const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1).toISOString();
+    const twelveMonthsAgo = new Date(month.getFullYear() - 1, month.getMonth(), 1).toISOString();
+
     const [
-      { data: timelineReqs },
+      { data: timelineItems },
       { data: productItems },
       { data: categoryItems },
     ] = await Promise.all([
-      // Timeline: only dates + totals from requisitions (no item joins)
-      supabase.from('requisitions')
-        .select('created_at, total_cost')
-        .neq('status', 'CANCELADA')
-        .gte('created_at', oneYearAgoStr),
-
-      // Top products: item-level for 12 months, no categories join
+      // Timeline: ENTREGADA only, using delivered_quantity for accurate cost
       supabase.from('requisition_items')
-        .select('inventory_item_id, quantity, unit_cost, inventory_items!inner(name, code), requisitions!inner(created_at, status)')
-        .neq('requisitions.status', 'CANCELADA')
-        .gte('requisitions.created_at', oneYearAgoStr),
+        .select('quantity, delivered_quantity, unit_cost, requisitions!inner(created_at, status)')
+        .eq('requisitions.status', 'ENTREGADA')
+        .gte('requisitions.created_at', twelveMonthsAgo)
+        .lt('requisitions.created_at', monthEnd),
 
-      // Categories: current month only (much smaller dataset)
+      // Top products: ENTREGADA only, using delivered_quantity
       supabase.from('requisition_items')
-        .select('quantity, unit_cost, inventory_items!inner(categories(name)), requisitions!inner(created_at, status)')
-        .neq('requisitions.status', 'CANCELADA')
-        .gte('requisitions.created_at', startOfMonthStr),
+        .select('inventory_item_id, quantity, delivered_quantity, unit_cost, inventory_items!inner(name, code), requisitions!inner(created_at, status)')
+        .eq('requisitions.status', 'ENTREGADA')
+        .gte('requisitions.created_at', twelveMonthsAgo)
+        .lt('requisitions.created_at', monthEnd),
+
+      // Categories: ENTREGADA only, using delivered_quantity
+      supabase.from('requisition_items')
+        .select('quantity, delivered_quantity, unit_cost, inventory_items!inner(categories(name)), requisitions!inner(created_at, status)')
+        .eq('requisitions.status', 'ENTREGADA')
+        .gte('requisitions.created_at', monthStart)
+        .lt('requisitions.created_at', monthEnd),
     ]);
 
-    return { timelineReqs, productItems, categoryItems };
+    return { timelineItems, productItems, categoryItems, month };
   }, []);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       setState(prev => ({ ...prev, isLoading: true }));
 
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const oneYearAgo = new Date(now);
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      const oneYearAgoStr = oneYearAgo.toISOString();
-
       try {
-        // Run live metrics and chart data in parallel
         const [liveData, chartData] = await Promise.all([
-          fetchLiveMetrics(),
-          fetchChartData(oneYearAgoStr, startOfMonth),
+          fetchLiveMetrics(selectedMonth),
+          fetchChartData(selectedMonth),
         ]);
 
-        const { timelineReqs, productItems, categoryItems } = chartData;
+        const { timelineItems, productItems, categoryItems, month } = chartData;
 
-        // Build timeline map
+        // Build timeline map: 12 months ending at selected month, ENTREGADA + delivered_quantity
         const timelineMap: Record<string, number> = {};
         for (let i = 11; i >= 0; i--) {
-          const d = new Date();
-          d.setMonth(d.getMonth() - i);
+          const d = new Date(month.getFullYear(), month.getMonth() - i, 1);
           timelineMap[d.toLocaleString('es-ES', { month: 'short', year: 'numeric' })] = 0;
         }
-        timelineReqs?.forEach(req => {
+        timelineItems?.forEach(item => {
+          const req = item.requisitions as unknown as { created_at: string };
           const key = new Date(req.created_at).toLocaleString('es-ES', { month: 'short', year: 'numeric' });
-          if (key in timelineMap) timelineMap[key] += Number(req.total_cost) || 0;
+          if (key in timelineMap) {
+            const qty = (item.delivered_quantity ?? item.quantity) || 0;
+            timelineMap[key] += qty * (item.unit_cost || 0);
+          }
         });
 
-        // Build top products map
-        const prodMap: Record<string, { code: string; name: string; cost: number }> = {};
-        productItems?.forEach(item => {
-          const inv = item.inventory_items as unknown as { name: string; code: string };
-          const pid = item.inventory_item_id;
-          const cost = (item.quantity || 0) * (item.unit_cost || 0);
-          if (!prodMap[pid]) prodMap[pid] = { code: inv?.code || 'N/A', name: inv?.name || 'Item', cost: 0 };
-          prodMap[pid].cost += cost;
-        });
+        // Build top products map by period (relative to selected month)
+        const buildProdMap = (cutoff: Date, ceiling: Date) => {
+          const map: Record<string, { code: string; name: string; cost: number }> = {};
+          productItems?.forEach(item => {
+            const req = item.requisitions as unknown as { created_at: string };
+            const d = new Date(req.created_at);
+            if (d < cutoff || d >= ceiling) return;
+            const inv = item.inventory_items as unknown as { name: string; code: string };
+            const pid = item.inventory_item_id;
+            const qty = (item.delivered_quantity ?? item.quantity) || 0;
+            const cost = qty * (item.unit_cost || 0);
+            if (!map[pid]) map[pid] = { code: inv?.code || 'N/A', name: inv?.name || 'Item', cost: 0 };
+            map[pid].cost += cost;
+          });
+          return Object.values(map).sort((a, b) => b.cost - a.cost).slice(0, 15);
+        };
+        const mEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+        const productChartDataByPeriod = {
+          '1m': buildProdMap(new Date(month.getFullYear(), month.getMonth(), 1), mEnd),
+          '3m': buildProdMap(new Date(month.getFullYear(), month.getMonth() - 2, 1), mEnd),
+          '6m': buildProdMap(new Date(month.getFullYear(), month.getMonth() - 5, 1), mEnd),
+          '12m': buildProdMap(new Date(month.getFullYear() - 1, month.getMonth(), 1), mEnd),
+        };
 
-        // Build categories map
+        // Build categories map: ENTREGADA + delivered_quantity
         const catMap: Record<string, number> = {};
         categoryItems?.forEach(item => {
           const inv = item.inventory_items as unknown as { categories?: { name: string } | null };
           const catName = inv?.categories?.name || 'Sin Categoría';
-          catMap[catName] = (catMap[catName] || 0) + (item.quantity || 0) * (item.unit_cost || 0);
+          const qty = (item.delivered_quantity ?? item.quantity) || 0;
+          catMap[catName] = (catMap[catName] || 0) + qty * (item.unit_cost || 0);
         });
 
-        // Single setState = 1 re-render total
         setState({
           isLoading: false,
           ...liveData,
@@ -199,7 +234,7 @@ export default function DashboardPage() {
             mes: mes.charAt(0).toUpperCase() + mes.slice(1),
             consumo,
           })),
-          productChartData: Object.values(prodMap).sort((a, b) => b.cost - a.cost).slice(0, 15),
+          productChartDataByPeriod,
           categoryChartData: Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
         });
       } catch (err) {
@@ -210,23 +245,28 @@ export default function DashboardPage() {
 
     fetchDashboardData();
 
-    // Realtime: only refetch fast metrics, NOT the heavy chart data
+    // Realtime: only when viewing current month
+    const currentMonth = new Date();
+    const viewingCurrent = selectedMonth.getFullYear() === currentMonth.getFullYear() && selectedMonth.getMonth() === currentMonth.getMonth();
+    if (!viewingCurrent) return;
+
     const channel = supabase
       .channel('dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'requisitions' }, async () => {
-        const liveData = await fetchLiveMetrics();
+        const liveData = await fetchLiveMetrics(selectedMonth);
         setState(prev => ({ ...prev, ...liveData }));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items' }, async () => {
-        const liveData = await fetchLiveMetrics();
+        const liveData = await fetchLiveMetrics(selectedMonth);
         setState(prev => ({ ...prev, ...liveData }));
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [fetchLiveMetrics, fetchChartData]);
+  }, [selectedMonth, fetchLiveMetrics, fetchChartData]);
 
-  const { isLoading, metrics, recentActivity, stockAlerts, timelineChartData, productChartData, budgetChartData, categoryChartData } = state;
+  const { isLoading, metrics, recentActivity, stockAlerts, timelineChartData, productChartDataByPeriod, budgetChartData, categoryChartData } = state;
+  const productChartData = productChartDataByPeriod[productPeriod] ?? [];
 
   const formatTimeAgo = (dateString: string) => {
     const diffMs = Date.now() - new Date(dateString).getTime();
@@ -287,6 +327,20 @@ export default function DashboardPage() {
                 </div>
               );
             })}
+          </div>
+
+          {/* Month Navigator */}
+          <div className="flex items-center justify-center gap-3 py-2">
+            <button onClick={() => navigateMonth(-1)} className="p-1.5 rounded hover:bg-gray-100 text-primary transition-colors">
+              <ChevronLeft size={20} strokeWidth={2.5} />
+            </button>
+            <span className="text-sm font-semibold text-primary min-w-[140px] text-center capitalize">
+              {selectedMonth.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
+              {isCurrentMonth && <span className="ml-2 text-[10px] font-bold text-sky-500 uppercase tracking-widest">actual</span>}
+            </span>
+            <button onClick={() => navigateMonth(1)} disabled={isCurrentMonth} className="p-1.5 rounded hover:bg-gray-100 text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+              <ChevronRight size={20} strokeWidth={2.5} />
+            </button>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
@@ -369,10 +423,26 @@ export default function DashboardPage() {
           {/* ADVANCED CHARTS SECTION */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
 
-            {/* Table: Top 15 Products (12 Months) */}
+            {/* Table: Top 15 Products */}
             <div className="bg-white border border-gray-100 shadow-sm col-span-1 lg:col-span-2">
               <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
-                <h2 className="text-xs font-bold text-white uppercase tracking-widest">Top 15 Productos por Consumo USD (Últimos 12 Meses)</h2>
+                <h2 className="text-xs font-bold text-white uppercase tracking-widest">
+                  Top 15 Productos por Consumo USD
+                </h2>
+                <div className="flex gap-1">
+                  {(['1m', '3m', '6m', '12m'] as ProductPeriod[]).map((p) => {
+                    const labels: Record<ProductPeriod, string> = { '1m': 'Mes actual', '3m': '3 meses', '6m': '6 meses', '12m': '12 meses' };
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => setProductPeriod(p)}
+                        className={`text-[10px] font-bold px-2.5 py-1 uppercase tracking-widest transition-colors ${productPeriod === p ? 'bg-white text-primary' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
+                      >
+                        {labels[p]}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="w-full overflow-x-auto p-6">
                 <table className="w-full text-left border-collapse">
@@ -490,7 +560,7 @@ export default function DashboardPage() {
                 <div className="h-[350px] w-full">
                   {budgetChartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={budgetChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <BarChart data={budgetChartData} margin={{ top: 30, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                         <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} />
                         <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
@@ -500,8 +570,12 @@ export default function DashboardPage() {
                           cursor={{ fill: '#f9fafb' }}
                         />
                         <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                        <Bar dataKey="presupuesto" name="Presupuesto Asignado" fill="#e5e7eb" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="consumido" name="Consumo MTD" fill="#003566" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="presupuesto" name="Presupuesto Asignado" fill="#e5e7eb" radius={[4, 4, 0, 0]}>
+                          <LabelList dataKey="presupuesto" position="top" formatter={(val: unknown) => Number(val) > 0 ? `$${Number(val).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : ''} style={{ fontSize: 10, fill: '#6b7280', fontWeight: 600 }} />
+                        </Bar>
+                        <Bar dataKey="consumido" name="Consumo MTD" fill="#003566" radius={[4, 4, 0, 0]}>
+                          <LabelList dataKey="consumido" position="top" formatter={(val: unknown) => Number(val) > 0 ? `$${Number(val).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : ''} style={{ fontSize: 10, fill: '#003566', fontWeight: 600 }} />
+                        </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (

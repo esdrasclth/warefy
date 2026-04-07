@@ -790,10 +790,13 @@ function SupplierModal({ onClose, onCreated }: { onClose: () => void, onCreated:
     if (!name.trim()) return;
     setIsSaving(true);
     try {
+      const orFilter = taxId.trim()
+        ? `name.ilike."${name.trim().replace(/"/g, '\\"')}",tax_id.eq."${taxId.trim().replace(/"/g, '\\"')}"`
+        : `name.ilike."${name.trim().replace(/"/g, '\\"')}"`;
       const { data: existing, error: checkError } = await supabase
         .from('suppliers')
         .select('id, name')
-        .or(`name.ilike.${name.trim()},tax_id.eq.${taxId.trim()}`)
+        .or(orFilter)
         .maybeSingle();
 
       if (checkError) throw checkError;

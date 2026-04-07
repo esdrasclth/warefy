@@ -20,6 +20,22 @@ export async function POST(request: Request) {
       const results = await Promise.all(updates);
       const updateError = results.find(r => r.error)?.error;
       if (updateError) throw updateError;
+
+      // Recalculate total_cost based on delivered quantities
+      const { data: items, error: itemsError } = await supabaseAdmin
+        .from('requisition_items')
+        .select('id, quantity, unit_cost, delivered_quantity')
+        .eq('requisition_id', requisitionId);
+      if (itemsError) throw itemsError;
+      const newTotal = (items ?? []).reduce((sum, item) => {
+        const qty = item.delivered_quantity ?? item.quantity ?? 0;
+        return sum + qty * (item.unit_cost ?? 0);
+      }, 0);
+      const { error: totalError } = await supabaseAdmin
+        .from('requisitions')
+        .update({ total_cost: newTotal })
+        .eq('id', requisitionId);
+      if (totalError) throw totalError;
     }
 
     const { error } = await supabaseAdmin
