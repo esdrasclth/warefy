@@ -41,7 +41,8 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
   // Currency Conversion State
   const [exchangeRate, setExchangeRate] = useState<number | null>(null);
   const [useHnlConverter, setUseHnlConverter] = useState(false);
-  const [rawHnlValue, setRawHnlValue] = useState<number | ''>('');
+  // rawValue: lo que el usuario escribe en el campo (HNL o USD según el modo)
+  const [rawValue, setRawValue] = useState<string>('');
 
   // Form State
   const [formData, setFormData] = useState<ProductData>({
@@ -68,7 +69,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
     if (isOpen) {
       fetchMetadata();
       setUseHnlConverter(false);
-      setRawHnlValue('');
+      setRawValue('');
     }
   }, [isOpen]);
 
@@ -76,28 +77,41 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
   useEffect(() => {
     if (productToEdit) {
       setFormData(productToEdit);
+      setRawValue(productToEdit.price > 0 ? String(productToEdit.price) : '');
     } else {
       setFormData({
         id: crypto.randomUUID(), // pre-generar ID para poder subir imagen antes de guardar
         code: '', name: '', category_id: '', unit_id: '',
         quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE'
       });
+      setRawValue('');
     }
+    setUseHnlConverter(false);
   }, [productToEdit, isOpen]);
 
   const handleChange = (field: keyof ProductData, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleHnlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value === '' ? '' : Number(e.target.value);
-    setRawHnlValue(val);
-    if (val !== '' && exchangeRate) {
-      // Auto compute the USD equivalent into the main form data payload
-      setFormData(prev => ({ ...prev, price: Number((val / exchangeRate).toFixed(4)) }));
-    } else {
-      setFormData(prev => ({ ...prev, price: 0 }));
-    }
+  // Calcula el precio USD a partir del rawValue según el modo activo
+  const computePrice = (val: string, converting: boolean): number => {
+    const num = Number(val);
+    if (!val || isNaN(num)) return 0;
+    if (converting && exchangeRate) return Number((num / exchangeRate).toFixed(4));
+    return num;
+  };
+
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setRawValue(val);
+    setFormData(prev => ({ ...prev, price: computePrice(val, useHnlConverter) }));
+  };
+
+  const handleConverterToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked;
+    setUseHnlConverter(checked);
+    // Recalcular precio con el mismo rawValue bajo el nuevo modo
+    setFormData(prev => ({ ...prev, price: computePrice(rawValue, checked) }));
   };
 
   const handleAddCategory = async () => {
@@ -328,47 +342,51 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-semibold text-primary">Precio Unitario ($)</label>
+                      <label className="text-xs font-semibold text-primary">
+                        Precio Unitario {useHnlConverter ? '(HNL → $)' : '($)'}
+                      </label>
                       <label className="flex items-center gap-1.5 cursor-pointer group">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           checked={useHnlConverter}
                           disabled={!exchangeRate}
-                          onChange={(e) => setUseHnlConverter(e.target.checked)}
+                          onChange={handleConverterToggle}
                           className="accent-primary w-3 h-3 cursor-pointer"
                         />
                         <span className="text-[10px] text-gray-500 font-medium tracking-wide uppercase group-hover:text-primary transition-colors">
-                          En Lempiras (HNL)
+                          Convertir a $
                         </span>
                       </label>
                     </div>
-                    
-                    {useHnlConverter ? (
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 text-xs">
-                          L.
+
+                    {useHnlConverter && exchangeRate ? (
+                      <>
+                        {/* Campo read-only mostrando el resultado en USD */}
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 text-xs">$</div>
+                          <input
+                            value={rawValue ? Number((Number(rawValue) / exchangeRate).toFixed(4)) : ''}
+                            readOnly
+                            type="number"
+                            placeholder="0.00"
+                            className="w-full pl-8 pr-3 py-2 border border-primary bg-primary/5 text-sm text-primary font-semibold cursor-default focus:outline-none"
+                          />
                         </div>
-                        <input 
-                          value={rawHnlValue || ''} 
-                          onChange={handleHnlChange}
-                          type="number" step="0.01" 
-                          className="w-full pl-8 pr-3 py-2 border border-accent bg-accent/5 text-sm focus:outline-none focus:border-primary transition-colors" 
-                          placeholder="0.00"
-                        />
-                        <div className="absolute -bottom-5 right-0 text-[9px] text-accent font-bold tracking-widest uppercase">
-                          = USD ${(Number(rawHnlValue) / (exchangeRate || 1)).toFixed(4)}
-                        </div>
-                      </div>
+                        {rawValue && (
+                          <div className="text-[10px] text-gray-500 tracking-wide text-right">
+                            Convertido de <span className="font-semibold text-gray-700">L. {rawValue}</span>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 text-xs">
-                          $
-                        </div>
-                        <input 
-                          value={formData.price || ''} 
-                          onChange={e => handleChange('price', Number(e.target.value))}
-                          type="number" step="0.01" 
-                          className="w-full pl-7 pr-3 py-2 border border-gray-200 bg-white text-sm focus:outline-none focus:border-primary transition-colors" 
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 text-xs">$</div>
+                        <input
+                          value={rawValue}
+                          onChange={handlePriceChange}
+                          type="number" step="0.01"
+                          placeholder="0.00"
+                          className="w-full pl-8 pr-3 py-2 border border-gray-200 bg-white text-sm focus:outline-none focus:border-primary transition-colors"
                         />
                       </div>
                     )}

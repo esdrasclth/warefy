@@ -5,7 +5,20 @@
       "Bash(ls -la \"C:\\\\Projects\\\\warefyProjects\\\\warefy/app/\\(dashboard\\)/dashboard\")",
       "Bash(find C:ProjectswarefyProjectswarefy -type f -name .env*)",
       "Bash(find C:ProjectswarefyProjectswarefy -type f -name *email* -o -name *mail* -o -name *cron* -o -name *schedule*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "mcp__e5fc80a5-9991-4a7f-b3c2-b921fc7754e8__list_teams",
+      "mcp__e5fc80a5-9991-4a7f-b3c2-b921fc7754e8__list_projects",
+      "mcp__e5fc80a5-9991-4a7f-b3c2-b921fc7754e8__get_runtime_logs",
+      "mcp__e5fc80a5-9991-4a7f-b3c2-b921fc7754e8__get_project",
+      "mcp__e5fc80a5-9991-4a7f-b3c2-b921fc7754e8__list_deployments",
+      "Bash(ls -la /c/Projects/warefyProjects/warefy/app/\\\\\\(dashboard\\\\\\)/)",
+      "Bash(npx tsc:*)",
+      "Bash(xargs grep:*)",
+      "Bash(find /c/Projects/warefyProjects/warefy/lib -type f -name *.ts -o -name *.tsx)",
+      "Bash(cat:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ]
   }
 }
