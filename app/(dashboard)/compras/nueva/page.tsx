@@ -33,7 +33,9 @@ interface ReportItem {
   code: string;
   name: string;
   quantitySolicited: number;
+  unitCost: number;
   currentStock: number;
+  pendingOC: number;
   avgMonthlyConsumption: number;
   avgWeeklyConsumption: number;
   coverageWeeksCurrent: number | null;
@@ -178,11 +180,12 @@ export default function NuevaCompraView() {
       const [
         { data: purchaseItemsData },
         { data: movementsOut },
-        { data: movementsIn }
+        { data: movementsIn },
+        { data: pendingOCItems },
       ] = await Promise.all([
         supabase
           .from('purchase_items')
-          .select('inventory_item_id, quantity, inventory_items(id, code, name, quantity, committed_quantity)')
+          .select('inventory_item_id, quantity, unit_cost, inventory_items(id, code, name, quantity, committed_quantity)')
           .eq('purchase_id', pData.id),
         supabase
           .from('stock_movements')
@@ -195,7 +198,13 @@ export default function NuevaCompraView() {
           .select('inventory_item_id, created_at')
           .eq('movement_type', 'IN')
           .in('inventory_item_id', itemIds)
-          .order('created_at', { ascending: false })
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('purchase_items')
+          .select('inventory_item_id, quantity, purchases!inner(id, status)')
+          .eq('purchases.status', 'PENDIENTE')
+          .neq('purchases.id', pData.id)
+          .in('inventory_item_id', itemIds),
       ]);
 
       // Build maps
@@ -207,6 +216,11 @@ export default function NuevaCompraView() {
       const lastInMap: Record<string, string> = {};
       (movementsIn || []).forEach(m => {
         if (!lastInMap[m.inventory_item_id]) lastInMap[m.inventory_item_id] = m.created_at;
+      });
+
+      const pendingOCMap: Record<string, number> = {};
+      (pendingOCItems || []).forEach(m => {
+        pendingOCMap[m.inventory_item_id] = (pendingOCMap[m.inventory_item_id] || 0) + (m.quantity || 0);
       });
 
       const reportItems: ReportItem[] = (purchaseItemsData || []).map(pi => {
@@ -224,7 +238,9 @@ export default function NuevaCompraView() {
           code: inv?.code || 'N/A',
           name: inv?.name || 'Item',
           quantitySolicited: pi.quantity || 0,
+          unitCost: Number(pi.unit_cost) || 0,
           currentStock,
+          pendingOC: pendingOCMap[pi.inventory_item_id] || 0,
           avgMonthlyConsumption: avgMonthly,
           avgWeeklyConsumption: avgWeekly,
           coverageWeeksCurrent,
@@ -254,7 +270,7 @@ export default function NuevaCompraView() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto pb-12">
+    <div className="space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto pb-12">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
@@ -443,15 +459,9 @@ export default function NuevaCompraView() {
                         />
                       </td>
                       <td className="py-4 px-2">
-                        <div className="flex items-center gap-1 border border-gray-200 p-1.5 bg-white focus-within:border-primary">
+                        <div className="flex items-center gap-1 border border-gray-200 p-1.5 bg-gray-50">
                           <span className="text-xs text-gray-400">$</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={item.unitCost || ""}
-                            onChange={(e) => handleUpdateItem(item.inventoryItem.id, 'unitCost', e.target.value)}
-                            className="w-full text-sm text-right outline-none"
-                          />
+                          <span className="w-full text-sm text-right text-gray-700">{(item.unitCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                       </td>
                       <td className="py-4 text-sm font-bold text-primary text-right">
@@ -541,7 +551,10 @@ function AuthorizationReportModal({
         <td style="font-family:monospace">${item.code}</td>
         <td style="font-weight:600">${item.name}</td>
         <td style="text-align:center;font-weight:700;color:#1e40af">${item.quantitySolicited}</td>
+        <td style="text-align:right;font-weight:600">$${item.unitCost.toLocaleString('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td style="text-align:right;font-weight:700;color:#15803d">$${(item.quantitySolicited * item.unitCost).toLocaleString('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
         <td style="text-align:center">${item.currentStock}</td>
+        <td style="text-align:center;font-weight:700;color:${item.pendingOC > 0 ? '#1e40af' : '#9ca3af'}">${item.pendingOC > 0 ? item.pendingOC : '—'}</td>
         <td style="text-align:center">${item.avgMonthlyConsumption}</td>
         <td style="text-align:center">${item.avgWeeklyConsumption}</td>
         <td style="text-align:center;font-weight:700;color:${coverageColor(item.coverageWeeksCurrent)}">
@@ -610,7 +623,10 @@ function AuthorizationReportModal({
         <th>Código</th>
         <th>Descripción</th>
         <th>Cant. Solicitada</th>
+        <th>Precio Unit.</th>
+        <th>Subtotal</th>
         <th>Inv. Actual</th>
+        <th>OC Pendiente</th>
         <th>Cons. Mensual Prom.</th>
         <th>Cons. Semanal Prom.</th>
         <th>Sem. Disponibles</th>
@@ -710,7 +726,10 @@ function AuthorizationReportModal({
                           <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary">Código</th>
                           <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary">Descripción</th>
                           <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">Cant. Solicitada</th>
+                          <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-right">Precio Unit.</th>
+                          <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-right">Subtotal</th>
                           <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">Inv. Actual</th>
+                          <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">OC Pendiente</th>
                           <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">Cons. Mensual Prom.</th>
                           <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">Cons. Semanal Prom.</th>
                           <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-primary text-center">Sem. Disponibles</th>
@@ -724,7 +743,12 @@ function AuthorizationReportModal({
                             <td className="px-3 py-2.5 text-xs font-mono text-gray-600 border border-gray-200">{item.code}</td>
                             <td className="px-3 py-2.5 text-xs font-semibold text-gray-800 border border-gray-200">{item.name}</td>
                             <td className="px-3 py-2.5 text-xs text-center font-bold text-primary border border-gray-200">{item.quantitySolicited}</td>
+                            <td className="px-3 py-2.5 text-xs text-right text-gray-700 border border-gray-200">${item.unitCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td className="px-3 py-2.5 text-xs text-right font-bold text-green-700 border border-gray-200">${(item.quantitySolicited * item.unitCost).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                             <td className="px-3 py-2.5 text-xs text-center text-gray-700 border border-gray-200">{item.currentStock}</td>
+                            <td className="px-3 py-2.5 text-xs text-center font-bold border border-gray-200">
+                              {item.pendingOC > 0 ? <span className="text-blue-600">{item.pendingOC}</span> : <span className="text-gray-300">—</span>}
+                            </td>
                             <td className="px-3 py-2.5 text-xs text-center text-gray-700 border border-gray-200">{item.avgMonthlyConsumption}</td>
                             <td className="px-3 py-2.5 text-xs text-center text-gray-700 border border-gray-200">{item.avgWeeklyConsumption}</td>
                             <td className="px-3 py-2.5 text-xs text-center font-bold border border-gray-200">

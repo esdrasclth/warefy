@@ -293,7 +293,7 @@ export default function NuevaRequisaView() {
 
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto pb-12">
+    <div className="space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto pb-12">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-100 pb-6">
         <div className="flex items-center gap-4">
@@ -315,10 +315,10 @@ export default function NuevaRequisaView() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
         {/* Left Column: Responsibles */}
-        <div className="space-y-8">
+        <div className="lg:col-span-1 space-y-8">
           
           {/* Box: Solicitante */}
           <div className="bg-white border border-gray-100 p-6 shadow-sm relative">
@@ -448,7 +448,7 @@ export default function NuevaRequisaView() {
         </div>
 
         {/* Right Column: Items */}
-        <div className="bg-white border border-gray-100 p-6 shadow-sm flex flex-col h-[600px] relative">
+        <div className="lg:col-span-2 bg-white border border-gray-100 p-6 shadow-sm flex flex-col h-[600px] relative">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-3 mb-4">
             4. Registro de Artículos
           </h3>
@@ -511,7 +511,7 @@ export default function NuevaRequisaView() {
                 
                 return (
                   <div key={item.inventoryItem.id} className="flex items-center gap-3 bg-white border border-gray-100 p-3 shadow-sm group animate-in slide-in-from-top-2">
-                     <span className="text-xs font-bold text-gray-300 w-4 text-center">{i + 1}</span>
+                     <span className="text-xs font-bold text-gray-300 w-4 text-center shrink-0">{i + 1}</span>
                      <div className="flex-1 min-w-0">
                        <p className="text-sm font-semibold text-primary truncate">{item.inventoryItem.name}</p>
                        <div className="flex items-center gap-2 mt-0.5">
@@ -521,21 +521,25 @@ export default function NuevaRequisaView() {
                          </span>
                        </div>
                      </div>
-                     <div className="flex items-center gap-2">
-                       <div className="flex flex-col">
-                         <span className="text-[9px] text-gray-400 uppercase tracking-widest text-center">Cant.</span>
-                         <div className="flex items-center">
-                           <input 
-                             type="number"
-                             min="1"
-                             max={availableStock}
-                             value={item.quantity || ""}
-                             onChange={(e) => handleUpdateQuantity(item.inventoryItem.id, e.target.value)}
-                             className="w-16 border border-gray-200 px-2 py-1 text-sm text-center focus:outline-none focus:border-primary font-bold text-primary"
-                           />
-                         </div>
+                     <div className="flex items-center gap-3">
+                       <div className="flex flex-col items-center">
+                         <span className="text-[9px] text-gray-400 uppercase tracking-widest">Cant.</span>
+                         <input
+                           type="number"
+                           min="1"
+                           max={availableStock}
+                           value={item.quantity || ""}
+                           onChange={(e) => handleUpdateQuantity(item.inventoryItem.id, e.target.value)}
+                           className="w-16 border border-gray-200 px-2 py-1 text-sm text-center focus:outline-none focus:border-primary font-bold text-primary"
+                         />
                        </div>
-                       <button onClick={() => handleRemoveItem(item.inventoryItem.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors mt-3">
+                       <div className="flex flex-col items-end min-w-[80px]">
+                         <span className="text-[9px] text-gray-400 uppercase tracking-widest">Subtotal</span>
+                         <span className="text-sm font-bold text-primary">
+                           ${(item.quantity * item.inventoryItem.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                         </span>
+                       </div>
+                       <button onClick={() => handleRemoveItem(item.inventoryItem.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors mt-3 shrink-0">
                          <Trash2 size={16} />
                        </button>
                      </div>
@@ -546,9 +550,17 @@ export default function NuevaRequisaView() {
           </div>
           
           {selectedItems.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center px-2">
-              <span className="text-sm text-gray-500">Total de Artículos Diversos:</span>
-              <span className="text-lg font-bold text-primary">{selectedItems.length}</span>
+            <div className="mt-4 pt-4 border-t border-gray-100 px-2 space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-400 uppercase tracking-widest">Artículos diversos</span>
+                <span className="text-sm font-bold text-gray-500">{selectedItems.length}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-400 uppercase tracking-widest">Total Estimado</span>
+                <span className="text-lg font-bold text-primary">
+                  ${selectedItems.reduce((acc, curr) => acc + (curr.quantity * curr.inventoryItem.price), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
             </div>
           )}
           

@@ -42,8 +42,8 @@ export default function AlmacenPage() {
 
       const { data: reqData, error: reqError } = await supabase
         .from('requisition_items')
-        .select('inventory_item_id, quantity, requisitions!inner(status, created_at)')
-        .eq('requisitions.status', 'ENTREGADA') // or however delivered is marked
+        .select('inventory_item_id, quantity, delivered_quantity, requisitions!inner(status, created_at)')
+        .eq('requisitions.status', 'ENTREGADA')
         .gte('requisitions.created_at', sixMonthsAgo.toISOString());
 
       if (reqError) throw reqError;
@@ -56,7 +56,8 @@ export default function AlmacenPage() {
 
       const consumptionMap: Record<string, number> = {};
       reqData?.forEach(item => {
-        consumptionMap[item.inventory_item_id] = (consumptionMap[item.inventory_item_id] || 0) + item.quantity;
+        const qty = (item.delivered_quantity ?? item.quantity) || 0;
+        consumptionMap[item.inventory_item_id] = (consumptionMap[item.inventory_item_id] || 0) + qty;
       });
 
       const enrichedItems = invData?.map(item => ({

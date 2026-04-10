@@ -23,7 +23,7 @@ export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
     { name: 'Configuración', href: '/configuracion', icon: Settings, roles: ['ADMIN'] },
   ];
 
-  // SECURITY: Sin rol definido no se deben mostrar opciones de navegaciÃ³n
+  // SECURITY: Sin rol definido no se deben mostrar opciones de navegación
   const navItems = userRole
     ? allNavItems.filter(item => item.roles.includes(userRole))
     : [];

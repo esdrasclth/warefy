@@ -95,7 +95,7 @@ export default function DashboardPage() {
         .lt('requisitions.created_at', monthEnd),
       supabase.from('requisitions').select('id, consecutive, created_at, status, area_name').gte('created_at', monthStart).lt('created_at', monthEnd).order('created_at', { ascending: false }).limit(5),
       supabase.from('inventory_items').select('id, name, code, quantity, committed_quantity, min_stock, max_stock, price, status').eq('status', 'ACTIVE'),
-      supabase.from('areas').select('name, area_budgets(monthly_budget)'),
+      supabase.from('area_budgets').select('monthly_budget, areas(name)'),
     ]);
 
     const totalBudget = budgets?.reduce((acc, b) => acc + (Number(b.monthly_budget) || 0), 0) || 0;
@@ -108,9 +108,10 @@ export default function DashboardPage() {
     // Calculate monthlyCost and budgetMap from delivered items only
     let monthlyCost = 0;
     const budgetMap: Record<string, BudgetChartRow> = {};
-    areasWithBudgets?.forEach(area => {
-      const bdg = (area.area_budgets as { monthly_budget: number }[] | null)?.[0]?.monthly_budget || 0;
-      if (bdg > 0) budgetMap[area.name] = { name: area.name, presupuesto: Number(bdg), consumido: 0 };
+    areasWithBudgets?.forEach(budget => {
+      const areaName = (budget.areas as unknown as { name: string } | null)?.name;
+      const bdg = Number(budget.monthly_budget) || 0;
+      if (bdg > 0 && areaName) budgetMap[areaName] = { name: areaName, presupuesto: bdg, consumido: 0 };
     });
     deliveredItems?.forEach(item => {
       const req = item.requisitions as unknown as { area_name: string };
@@ -345,34 +346,46 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
 
-            {/* Actividad Reciente */}
+            {/* Presupuesto Disponible por Área */}
             <div className="bg-white border border-gray-100 shadow-sm flex flex-col h-[400px]">
               <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
-                <h2 className="text-xs font-bold text-white uppercase tracking-widest">Requisas Recientes</h2>
-                <Link href="/requisar" className="text-xs text-accent hover:text-white transition-colors flex items-center gap-1 font-bold">
-                  Ver todo <ArrowRight size={12} />
-                </Link>
+                <h2 className="text-xs font-bold text-white uppercase tracking-widest">Presupuesto por Área (Mes Actual)</h2>
               </div>
-              <div className="space-y-4 overflow-y-auto px-4 py-3 custom-scrollbar flex-1">
-                {recentActivity.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center mt-10">No hay requisas creadas recientemente.</p>
+              <div className="space-y-4 overflow-y-auto px-5 py-4 custom-scrollbar flex-1">
+                {budgetChartData.filter(a => a.presupuesto > 0).length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center mt-10">No hay áreas con presupuesto asignado.</p>
                 ) : (
-                  recentActivity.map((req) => (
-                    <Link href={`/requisar/${req.id}`} key={req.id} className="flex items-center justify-between group cursor-pointer block hover:bg-gray-50 p-2 -mx-2 rounded transition-colors">
-                      <div className="flex items-center gap-4">
-                        <div className="h-8 w-1 bg-transparent group-hover:bg-white/30 transition-colors rounded"></div>
-                        <div>
-                          <p className="text-sm font-semibold text-primary group-hover:text-blue-600 transition-colors">
-                            REQ-{String(req.consecutive || 0).padStart(6, '0')}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-1">{req.created_at ? formatTimeAgo(req.created_at) : '-'} • {req.area_name}</p>
+                  budgetChartData
+                    .filter(a => a.presupuesto > 0)
+                    .sort((a, b) => (b.consumido / b.presupuesto) - (a.consumido / a.presupuesto))
+                    .map((area) => {
+                      const pct = Math.min((area.consumido / area.presupuesto) * 100, 100);
+                      const disponible = area.presupuesto - area.consumido;
+                      const isOver = area.consumido > area.presupuesto;
+                      const barColor = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-orange-400' : 'bg-green-500';
+                      return (
+                        <div key={area.name}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-primary truncate max-w-[55%]">{area.name}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={`text-[10px] font-bold ${isOver ? 'text-red-600' : 'text-gray-500'}`}>
+                                {isOver ? 'Excedido' : `$${disponible.toLocaleString(undefined, { maximumFractionDigits: 0 })} disp.`}
+                              </span>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 border ${pct >= 90 ? 'text-red-600 bg-red-50 border-red-200' : pct >= 70 ? 'text-orange-600 bg-orange-50 border-orange-200' : 'text-green-600 bg-green-50 border-green-200'}`}>
+                                {pct.toFixed(0)}%
+                              </span>
+                            </div>
+                          </div>
+                          <div className="w-full bg-gray-100 h-2">
+                            <div className={`h-2 transition-all duration-500 ${barColor}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <div className="flex justify-between mt-0.5">
+                            <span className="text-[9px] text-gray-400">${area.consumido.toLocaleString(undefined, { maximumFractionDigits: 0 })} consumido</span>
+                            <span className="text-[9px] text-gray-400">${area.presupuesto.toLocaleString(undefined, { maximumFractionDigits: 0 })} total</span>
+                          </div>
                         </div>
-                      </div>
-                      <span className={`text-[10px] font-bold tracking-widest border px-2 py-1 uppercase ${getStatusColor(req.status)}`}>
-                        {req.status}
-                      </span>
-                    </Link>
-                  ))
+                      );
+                    })
                 )}
               </div>
             </div>
@@ -551,35 +564,31 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Chart: Budget vs Actuals (Current Month) */}
+            {/* Chart: Consumption by Area (Current Month) */}
             <div className="bg-white border border-gray-100 shadow-sm">
               <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
-                <h2 className="text-xs font-bold text-white uppercase tracking-widest">Presupuesto vs Consumo (Mes Actual)</h2>
+                <h2 className="text-xs font-bold text-white uppercase tracking-widest">Consumo por Áreas (Mes Actual)</h2>
               </div>
               <div className="p-6">
                 <div className="h-[350px] w-full">
-                  {budgetChartData.length > 0 ? (
+                  {budgetChartData.filter(d => d.consumido > 0).length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={budgetChartData} margin={{ top: 30, right: 30, left: 20, bottom: 5 }}>
+                      <BarChart data={budgetChartData.filter(d => d.consumido > 0).sort((a, b) => b.consumido - a.consumido)} margin={{ top: 30, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                         <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} />
                         <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
                         <Tooltip
-                          formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, '']}
+                          formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Consumo']}
                           contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb' }}
                           cursor={{ fill: '#f9fafb' }}
                         />
-                        <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                        <Bar dataKey="presupuesto" name="Presupuesto Asignado" fill="#e5e7eb" radius={[4, 4, 0, 0]}>
-                          <LabelList dataKey="presupuesto" position="top" formatter={(val: unknown) => Number(val) > 0 ? `$${Number(val).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : ''} style={{ fontSize: 10, fill: '#6b7280', fontWeight: 600 }} />
-                        </Bar>
                         <Bar dataKey="consumido" name="Consumo MTD" fill="#003566" radius={[4, 4, 0, 0]}>
                           <LabelList dataKey="consumido" position="top" formatter={(val: unknown) => Number(val) > 0 ? `$${Number(val).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : ''} style={{ fontSize: 10, fill: '#003566', fontWeight: 600 }} />
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="flex items-center justify-center h-full text-gray-400 text-sm">No hay áreas con presupuesto o consumo activo.</div>
+                    <div className="flex items-center justify-center h-full text-gray-400 text-sm">No hay consumo registrado por áreas en el mes actual.</div>
                   )}
                 </div>
               </div>

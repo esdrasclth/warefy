@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { ShoppingCart, Plus, Search, Trash2, Eye, Loader2, Check, X, FileSpreadsheet, Edit } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShoppingCart, Plus, Search, Trash2, Eye, Loader2, Check, X, FileSpreadsheet, Edit, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
@@ -86,6 +86,12 @@ export default function ComprasPage() {
   };
 
   const [isExporting, setIsExporting] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const toggleRow = (id: string) => setExpandedRows(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   const exportToExcel = async () => {
     setIsExporting(true);
@@ -133,17 +139,22 @@ export default function ComprasPage() {
         const codigo = `COM-${String(p.consecutive).padStart(6, '0')}`;
         const proveedor = (p.suppliers as any)?.name || 'N/A';
         const fecha = new Date(p.created_at ?? '').toLocaleDateString();
+        const refRequisa = (p.requisitions as any)
+          ? `REQ-${String((p.requisitions as any).consecutive).padStart(6, '0')}`
+          : p.manual_requisition_number || '';
         ((p.purchase_items as any[]) ?? []).forEach((item: any) => {
           const qty = item.quantity ?? 0;
           const unitCost = item.unit_cost ?? 0;
+          const receivedQty = item.received_quantity ?? (p.status === 'RECIBIDA' ? qty : '');
           detail.push({
             'Código Compra': codigo,
+            'Ref./Requisa': refRequisa,
             'Proveedor': proveedor,
             'Fecha': fecha,
             'Código Producto': item.inventory_items?.code || '',
             'Producto': item.inventory_items?.name || '',
             'Cantidad Solicitada': qty,
-            'Cantidad Recibida': item.received_quantity ?? '',
+            'Cantidad Recibida': receivedQty,
             'Costo Unitario ($)': unitCost,
             'Subtotal ($)': +(qty * unitCost).toFixed(2),
             'Estado Compra': p.status,
@@ -272,7 +283,8 @@ export default function ComprasPage() {
             <tbody className="divide-y divide-gray-50">
               {filteredPurchases.length > 0 ? (
                 filteredPurchases.map((p) => (
-                  <tr key={p.id} className="hover:bg-blue-50/20 transition-colors group">
+                  <React.Fragment key={p.id}>
+                  <tr className={`transition-colors group cursor-pointer ${expandedRows.has(p.id) ? 'bg-blue-50/30' : 'hover:bg-blue-50/20'}`} onClick={() => toggleRow(p.id)}>
                     <td className="py-2 px-6">
                       <div className="flex flex-col">
                         <span className="text-sm font-bold text-primary truncate">COM-{String(p.consecutive).padStart(6, '0')}</span>
@@ -308,8 +320,15 @@ export default function ComprasPage() {
                         {p.status}
                       </span>
                     </td>
-                    <td className="py-2 px-6 text-center sticky right-0 bg-white group-hover:bg-blue-50/20 transition-colors border-l border-gray-100 shadow-[ -5px_0_10px_-5px_rgba(0,0,0,0.05) ] z-10">
+                    <td className="py-2 px-6 text-center sticky right-0 bg-white group-hover:bg-blue-50/20 transition-colors border-l border-gray-100 shadow-[ -5px_0_10px_-5px_rgba(0,0,0,0.05) ] z-10" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => toggleRow(p.id)}
+                          className={`transition-colors p-1 ${expandedRows.has(p.id) ? 'text-primary' : 'text-gray-400 hover:text-primary'}`}
+                          title="Ver detalle"
+                        >
+                          {expandedRows.has(p.id) ? <ChevronDown size={14} strokeWidth={2.5} /> : <ChevronRight size={14} strokeWidth={2.5} />}
+                        </button>
                         {p.status === 'PENDIENTE' && (
                           <>
                             <button
@@ -354,6 +373,52 @@ export default function ComprasPage() {
                       </div>
                     </td>
                   </tr>
+                  {expandedRows.has(p.id) && (
+                    <tr key={`${p.id}-detail`} className="bg-gray-50/80 border-b border-gray-100">
+                      <td colSpan={7} className="px-6 py-3">
+                        <div className="pl-4 border-l-2 border-primary/20">
+                          {(p.purchase_items as any[])?.length > 0 ? (
+                            <table className="w-full text-left text-xs">
+                              <thead>
+                                <tr className="text-[9px] font-bold uppercase tracking-widest text-gray-400 border-b border-gray-200">
+                                  <th className="pb-1.5 pr-4">Código</th>
+                                  <th className="pb-1.5 pr-4">Producto</th>
+                                  <th className="pb-1.5 pr-4 text-right">Cant. Solicitada</th>
+                                  <th className="pb-1.5 pr-4 text-right">Cant. Recibida</th>
+                                  <th className="pb-1.5 pr-4 text-right">Costo Unit. ($)</th>
+                                  <th className="pb-1.5 text-right">Subtotal ($)</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {(p.purchase_items as any[]).map((item: any, i: number) => {
+                                  const qty = item.quantity ?? 0;
+                                  const received = item.received_quantity ?? (p.status === 'RECIBIDA' ? qty : null);
+                                  const unitCost = item.unit_cost ?? 0;
+                                  return (
+                                    <tr key={i} className="text-gray-600">
+                                      <td className="py-1.5 pr-4 font-mono text-[10px] text-gray-400">{item.inventory_items?.code || '-'}</td>
+                                      <td className="py-1.5 pr-4 font-medium text-gray-700">{item.inventory_items?.name || '-'}</td>
+                                      <td className="py-1.5 pr-4 text-right">{qty}</td>
+                                      <td className="py-1.5 pr-4 text-right">
+                                        {received !== null
+                                          ? <span className="text-green-600 font-semibold">{received}</span>
+                                          : <span className="text-gray-300">—</span>}
+                                      </td>
+                                      <td className="py-1.5 pr-4 text-right font-mono">{unitCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                      <td className="py-1.5 text-right font-bold text-primary">{(qty * unitCost).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          ) : (
+                            <p className="text-xs text-gray-400 italic py-1">Sin productos registrados.</p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 ))
               ) : (
                 <tr>

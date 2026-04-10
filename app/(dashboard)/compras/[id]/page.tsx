@@ -144,7 +144,7 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
               <Check size={18} /> Confirmar Recepción
             </button>
           )}
-          <button className="flex items-center gap-2 bg-white text-primary px-5 py-2.5 text-sm font-semibold border border-gray-200 hover:bg-gray-50 transition-all shadow-sm">
+          <button onClick={() => window.print()} className="flex items-center gap-2 bg-white text-primary px-5 py-2.5 text-sm font-semibold border border-gray-200 hover:bg-gray-50 transition-all shadow-sm">
             <Printer size={18} /> Imprimir
           </button>
         </div>
