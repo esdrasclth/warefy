@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { X, Plus, Save, Loader2 } from 'lucide-react';
+import { X, Plus, Save, Loader2, Search, ChevronDown } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import ImageUpload from '@/components/inventory/ImageUpload';
 import { useToast } from '@/components/ui/Toast';
@@ -38,6 +38,8 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
   const [categories, setCategories] = useState<Category[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierDropdownOpen, setSupplierDropdownOpen] = useState(false);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [initialFormJson, setInitialFormJson] = useState('');
@@ -79,6 +81,8 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
       fetchMetadata();
       setUseHnlConverter(false);
       setRawValue('');
+      setSupplierSearch('');
+      setSupplierDropdownOpen(false);
     }
   }, [isOpen]);
 
@@ -102,6 +106,14 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
       setInitialFormJson(JSON.stringify(productToEdit ?? {}));
     }, 0);
   }, [productToEdit, isOpen]);
+
+  // Sync supplier search label when suppliers load or product changes
+  useEffect(() => {
+    if (suppliers.length > 0 && formData.preferred_supplier_id) {
+      const found = suppliers.find(s => s.id === formData.preferred_supplier_id);
+      if (found) setSupplierSearch(found.name);
+    }
+  }, [suppliers, formData.preferred_supplier_id]);
 
   const handleChange = (field: keyof ProductData, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -388,15 +400,67 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">Proveedor Preferido</h3>
                 <div className="space-y-1 p-4 border border-gray-100 bg-white">
                   <label className="text-xs font-semibold text-primary">Proveedor (para sugerencias de compra)</label>
-                  <select
-                    value={formData.preferred_supplier_id ?? ''}
-                    onChange={e => handleChange('preferred_supplier_id', e.target.value || null as any)}
-                    className="w-full border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
-                  >
-                    <option value="">Sin proveedor asignado</option>
-                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                  <p className="text-[10px] text-gray-400 mt-1">Usado para agrupar órdenes de compra automáticas en Sugerencias.</p>
+                  <div className="relative">
+                    <div className="relative flex items-center border border-gray-200 bg-gray-50 focus-within:border-primary transition-colors">
+                      <Search size={13} className="absolute left-3 text-gray-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={supplierSearch}
+                        onChange={e => {
+                          setSupplierSearch(e.target.value);
+                          setSupplierDropdownOpen(true);
+                          if (!e.target.value) {
+                            setFormData(prev => ({ ...prev, preferred_supplier_id: null }));
+                          }
+                        }}
+                        onFocus={() => setSupplierDropdownOpen(true)}
+                        onBlur={() => setTimeout(() => setSupplierDropdownOpen(false), 150)}
+                        placeholder="Buscar proveedor..."
+                        className="w-full pl-8 pr-8 py-2 text-sm bg-transparent focus:outline-none"
+                      />
+                      <ChevronDown size={13} className="absolute right-3 text-gray-400 pointer-events-none" />
+                    </div>
+
+                    {supplierDropdownOpen && (
+                      <div className="absolute z-50 w-full bg-white border border-gray-200 shadow-lg max-h-48 overflow-y-auto">
+                        <div
+                          className="px-3 py-2 text-xs text-gray-400 italic hover:bg-gray-50 cursor-pointer transition-colors"
+                          onMouseDown={() => {
+                            setFormData(prev => ({ ...prev, preferred_supplier_id: null }));
+                            setSupplierSearch('');
+                            setSupplierDropdownOpen(false);
+                          }}
+                        >
+                          Sin proveedor asignado
+                        </div>
+                        {suppliers
+                          .filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()))
+                          .map(s => (
+                            <div
+                              key={s.id}
+                              className={`px-3 py-2 text-sm cursor-pointer hover:bg-primary/5 transition-colors ${formData.preferred_supplier_id === s.id ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700'}`}
+                              onMouseDown={() => {
+                                setFormData(prev => ({ ...prev, preferred_supplier_id: s.id }));
+                                setSupplierSearch(s.name);
+                                setSupplierDropdownOpen(false);
+                              }}
+                            >
+                              {s.name}
+                            </div>
+                          ))
+                        }
+                        {suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase())).length === 0 && (
+                          <div className="px-3 py-2 text-xs text-gray-300 italic">Sin resultados</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {formData.preferred_supplier_id && (
+                    <p className="text-[10px] text-primary/60 mt-1 font-medium">
+                      Seleccionado: {suppliers.find(s => s.id === formData.preferred_supplier_id)?.name}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-gray-400 mt-0.5">Usado para agrupar órdenes de compra automáticas en Sugerencias.</p>
                 </div>
               </div>
 

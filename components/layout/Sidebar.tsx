@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Package, ClipboardList, Wallet, Users, X, Settings, BookOpen, ShoppingCart, TrendingDown, ScrollText } from 'lucide-react';
 
@@ -42,7 +43,7 @@ export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
         {/* Logo */}
         <div className="flex h-16 items-center justify-between px-6 border-b border-ash-cloud/40">
           <div className="flex items-center">
-            <span className="text-2xl font-bold tracking-[0.12em] text-midnight-ink uppercase">Warefy</span>
+            <Image src="/logowarefy.png" alt="Warefy" width={120} height={36} className="object-contain" priority />
           </div>
           <button onClick={() => setIsOpen(false)} className="md:hidden text-stone-whisper hover:text-midnight-ink transition-colors">
             <X size={20} />
