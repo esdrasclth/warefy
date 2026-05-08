@@ -23,7 +23,6 @@ export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
     { name: 'Configuración', href: '/configuracion', icon: Settings, roles: ['ADMIN'] },
   ];
 
-  // SECURITY: Sin rol definido no se deben mostrar opciones de navegación
   const navItems = userRole
     ? allNavItems.filter(item => item.roles.includes(userRole))
     : [];
@@ -31,21 +30,26 @@ export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
   return (
     <>
       <div
-        className={`fixed inset-0 bg-primary-dark/20 backdrop-blur-sm z-20 md:hidden transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`fixed inset-0 bg-midnight-ink/20 backdrop-blur-sm z-20 md:hidden transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={() => setIsOpen(false)}
       />
 
       <aside
-        className={`fixed inset-y-0 left-0 z-30 w-64 bg-background border-r border-gray-100 text-foreground transform transition-transform duration-300 md:relative md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col h-full`}
+        className={`fixed inset-y-0 left-0 z-30 w-64 bg-surface-white border-r border-ash-cloud/40 text-foreground transform transition-transform duration-300 md:relative md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'} flex flex-col h-full`}
       >
-        <div className="flex h-20 items-center justify-between px-8 border-b border-gray-100">
-          <span className="text-xl font-bold tracking-widest text-foreground uppercase">Warefy</span>
-          <button onClick={() => setIsOpen(false)} className="md:hidden text-primary hover:text-accent transition-colors">
-            <X size={24} />
+        {/* Logo */}
+        <div className="flex h-16 items-center justify-between px-6 border-b border-ash-cloud/40">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-spring-leaf inline-block" />
+            <span className="text-sm font-semibold tracking-[0.12em] text-midnight-ink uppercase">Warefy</span>
+          </div>
+          <button onClick={() => setIsOpen(false)} className="md:hidden text-stone-whisper hover:text-midnight-ink transition-colors">
+            <X size={20} />
           </button>
         </div>
 
-        <nav className="flex-1 py-6 px-4 space-y-1">
+        {/* Nav */}
+        <nav className="flex-1 py-4 px-3 space-y-0.5">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;
@@ -54,21 +58,27 @@ export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-4 px-4 py-3 text-sm font-medium transition-all duration-200 ${isActive
-                    ? 'bg-primary text-accent shadow-md'
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-primary'
-                  }`}
+                className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-150 rounded-sm ${
+                  isActive
+                    ? 'bg-oceanic-deep text-white'
+                    : 'text-slate-grille hover:bg-canvas hover:text-midnight-ink'
+                }`}
                 onClick={() => setIsOpen(false)}
               >
-                <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
-                <span className="tracking-wide">{item.name}</span>
+                <Icon size={16} strokeWidth={isActive ? 2.5 : 1.75} />
+                <span className="tracking-[0.01em]">{item.name}</span>
+                {isActive && (
+                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-spring-leaf" />
+                )}
               </Link>
             );
           })}
         </nav>
 
-        <div className="mt-auto p-6 border-t border-gray-100 text-xs text-gray-400 font-medium tracking-wider uppercase text-center">
-          ERP System v1.0
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-ash-cloud/40 flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-spring-leaf animate-pulse" />
+          <span className="text-[10px] text-stone-whisper font-medium tracking-[0.08em] uppercase">Sistema activo v1.0</span>
         </div>
       </aside>
     </>
