@@ -5,6 +5,7 @@ import { ArrowLeft, Save, Loader2, Check, X, Search, Plus, Trash2 } from 'lucide
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useToast } from '@/components/ui/Toast';
+import { notifyPendingApproval } from '@/lib/notifications';
 
 // Extracted interfaces
 interface InventoryItem {
@@ -290,6 +291,10 @@ export default function NuevaRequisaView() {
       
       const { error: itemsError } = await supabase.from('requisition_items').insert(reqItemsData);
       if (itemsError) throw itemsError;
+
+      if (finalStatus === 'PENDIENTE DE APROBACION') {
+        notifyPendingApproval(reqData.consecutive, reqData.id, `${requesterData.first_name} ${requesterData.last_name}`);
+      }
 
       // Pasar la nueva requisa a la lista para mostrarla de inmediato (sin esperar fetch)
       const optimisticRequisition = {

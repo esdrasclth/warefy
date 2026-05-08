@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, ClipboardList, Wallet, Users, X, Settings, BookOpen, ShoppingCart } from 'lucide-react';
+import { LayoutDashboard, Package, ClipboardList, Wallet, Users, X, Settings, BookOpen, ShoppingCart, TrendingDown, ScrollText } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -16,10 +16,12 @@ export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Productos', href: '/productos', icon: Package, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Compras', href: '/compras', icon: ShoppingCart, roles: ['ADMIN', 'ALMACEN'] },
+    { name: 'Sugerencias', href: '/compras/sugerencias', icon: TrendingDown, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Requisar', href: '/requisar', icon: ClipboardList, roles: ['ADMIN', 'ALMACEN', 'USER'] },
     { name: 'Registros', href: '/registros', icon: BookOpen, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Presupuestos', href: '/presupuestos', icon: Wallet, roles: ['ADMIN'] },
     { name: 'Empleados', href: '/empleados', icon: Users, roles: ['ADMIN'] },
+    { name: 'Auditoría', href: '/auditoria', icon: ScrollText, roles: ['ADMIN'] },
     { name: 'Configuración', href: '/configuracion', icon: Settings, roles: ['ADMIN'] },
   ];
 

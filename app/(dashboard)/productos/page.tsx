@@ -27,7 +27,7 @@ export default function AlmacenPage() {
       // 1. Fetch Inventory Items
       const { data: invData, error: invError } = await supabase
         .from('inventory_items')
-        .select('*, categories(name), units(name)')
+        .select('*, categories(name), units(name), preferred_supplier_id')
         .order('created_at', { ascending: false });
 
       if (invError) throw invError;
@@ -150,6 +150,7 @@ export default function AlmacenPage() {
       price: product.price,
       status: product.status,
       image_url: product.image_url,
+      preferred_supplier_id: (product as any).preferred_supplier_id ?? null,
     });
     setIsModalOpen(true);
   };

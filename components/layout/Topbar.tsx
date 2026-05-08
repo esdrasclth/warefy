@@ -4,6 +4,7 @@ import { Menu, LogOut, Shield } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase/client';
 import type { UserProfile } from '@/types';
+import NotificationBell from './NotificationBell';
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -52,7 +53,11 @@ export default function Topbar({ onMenuClick, userProfile }: TopbarProps) {
 
         <div className="h-8 w-px bg-gray-200 hidden sm:block"></div>
 
-        <button 
+        <NotificationBell userProfile={userProfile} />
+
+        <div className="h-8 w-px bg-gray-200 hidden sm:block"></div>
+
+        <button
           onClick={handleLogout}
           className="flex items-center gap-2 text-gray-500 hover:text-red-600 transition-colors group"
           title="Cerrar Sesión"

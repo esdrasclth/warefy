@@ -5,6 +5,8 @@ import { ArrowLeft, Loader2, Check, X, Printer, Package, Building2, Calendar, Sh
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useToast } from '@/components/ui/Toast';
+import { notifyPurchaseReceived } from '@/lib/notifications';
+import { logAudit } from '@/lib/audit';
 
 export default function DetalleCompraPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -100,6 +102,8 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
         })
         .eq('id', id);
 
+      notifyPurchaseReceived(purchase.consecutive, id);
+      logAudit({ tableName: 'purchases', recordId: id, action: 'STATUS_CHANGE', description: `OC #${purchase.consecutive} marcada como RECIBIDA. Total: $${newTotalCost.toFixed(2)}` });
       toast.success('Compra recibida e inventario actualizado con éxito.');
       fetchPurchase();
     } catch (error: any) {

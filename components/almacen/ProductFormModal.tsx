@@ -4,9 +4,11 @@ import { X, Plus, Save, Loader2 } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import ImageUpload from '@/components/inventory/ImageUpload';
 import { useToast } from '@/components/ui/Toast';
+import { logAudit } from '@/lib/audit';
 
 export interface Category { id: string; name: string; }
 export interface Unit { id: string; name: string; abbreviation?: string; }
+export interface Supplier { id: string; name: string; }
 
 // Match the main table's data structure
 export interface ProductData {
@@ -21,6 +23,7 @@ export interface ProductData {
   price: number;
   status: 'ACTIVE' | 'INACTIVE';
   image_url?: string | null;
+  preferred_supplier_id?: string | null;
 }
 
 interface ProductFormModalProps {
@@ -34,6 +37,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
   const toast = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [initialFormJson, setInitialFormJson] = useState('');
@@ -56,15 +60,17 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
   // Fetch Categories, Units and Global Settings
   const fetchMetadata = async () => {
     setIsLoadingMetadata(true);
-    const [catsRes, unitsRes, settingsRes] = await Promise.all([
+    const [catsRes, unitsRes, settingsRes, suppliersRes] = await Promise.all([
       supabase.from('categories').select('*').order('name'),
       supabase.from('units').select('*').order('name'),
-      supabase.from('global_settings').select('*').eq('id', 1).single()
+      supabase.from('global_settings').select('*').eq('id', 1).single(),
+      supabase.from('suppliers').select('id, name').eq('status', 'ACTIVE').order('name'),
     ]);
-    
+
     if (catsRes.data) setCategories(catsRes.data);
     if (unitsRes.data) setUnits(unitsRes.data);
     if (settingsRes.data) setExchangeRate(settingsRes.data.exchange_rate_usd_hnl);
+    if (suppliersRes.data) setSuppliers(suppliersRes.data);
     setIsLoadingMetadata(false);
   };
 
@@ -85,7 +91,8 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
       setFormData({
         id: crypto.randomUUID(), // pre-generar ID para poder subir imagen antes de guardar
         code: '', name: '', category_id: '', unit_id: '',
-        quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE'
+        quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE',
+        preferred_supplier_id: null,
       });
       setRawValue('');
     }
@@ -203,6 +210,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
           max_stock: formData.max_stock,
           price: formData.price,
           status: formData.status,
+          preferred_supplier_id: formData.preferred_supplier_id ?? null,
         },
       });
       error = res.error;
@@ -220,6 +228,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
         price: formData.price,
         status: formData.status,
         image_url: formData.image_url ?? null,
+        preferred_supplier_id: formData.preferred_supplier_id ?? null,
       });
       error = res.error;
     }
@@ -230,6 +239,16 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
       toast.error('Error guardando el artículo: ' + error.message);
       console.error(error);
     } else {
+      const itemId = productToEdit?.id ?? formData.id ?? '';
+      logAudit({
+        tableName: 'inventory_items',
+        recordId: itemId,
+        action: productToEdit ? 'UPDATE' : 'CREATE',
+        description: productToEdit
+          ? `Artículo "${formData.name}" actualizado.`
+          : `Artículo "${formData.name}" creado con código ${formData.code}.`,
+        newValues: { code: formData.code, name: formData.name, price: formData.price, quantity: formData.quantity },
+      });
       toast.success(productToEdit ? 'Artículo actualizado correctamente.' : 'Artículo creado correctamente.');
       onSaveSuccess();
       onClose();
@@ -361,6 +380,23 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                     )}
                   </div>
 
+                </div>
+              </div>
+
+              {/* Proveedor Preferido */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">Proveedor Preferido</h3>
+                <div className="space-y-1 p-4 border border-gray-100 bg-white">
+                  <label className="text-xs font-semibold text-primary">Proveedor (para sugerencias de compra)</label>
+                  <select
+                    value={formData.preferred_supplier_id ?? ''}
+                    onChange={e => handleChange('preferred_supplier_id', e.target.value || null as any)}
+                    className="w-full border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
+                  >
+                    <option value="">Sin proveedor asignado</option>
+                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <p className="text-[10px] text-gray-400 mt-1">Usado para agrupar órdenes de compra automáticas en Sugerencias.</p>
                 </div>
               </div>
 

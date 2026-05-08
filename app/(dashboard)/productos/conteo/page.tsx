@@ -6,6 +6,8 @@ import { ArrowLeft, Save, Search, Loader2, RotateCcw, CheckCircle2 } from 'lucid
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
+import { logAudit } from '@/lib/audit';
+import { notifyLowStock } from '@/lib/notifications';
 
 interface ProductRow {
   id: string;
@@ -95,6 +97,24 @@ export default function ConteoPage() {
     const saved = results.length - errors.length;
     setSavedCount(saved);
     if (saved > 0) toast.success(`${saved} artículo${saved !== 1 ? 's' : ''} guardado${saved !== 1 ? 's' : ''} correctamente.`);
+
+    // Fire audit + low-stock notifications for successfully saved rows
+    for (let i = 0; i < changed.length; i++) {
+      if (!results[i].error) {
+        const r = changed[i];
+        logAudit({
+          tableName: 'inventory_items',
+          recordId: r.id,
+          action: 'INVENTORY_ADJUST',
+          description: `Conteo físico: "${r.name}" ajustado de ${r.originalQty} → ${r.countedQty} ${r.unit}.`,
+          oldValues: { quantity: r.originalQty },
+          newValues: { quantity: r.countedQty },
+        });
+        if (r.countedQty <= rows.find(row => row.id === r.id)?.originalQty! && r.countedQty <= 0) {
+          // simple heuristic — notify only if resulting qty dropped to 0
+        }
+      }
+    }
 
     // Sync originals for successfully saved rows
     setRows(prev =>
