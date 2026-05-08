@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, Eye, Loader2, Download, FileSpreadsheet } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Eye, Loader2, FileSpreadsheet, ClipboardList } from 'lucide-react';
 import Pagination from '@/components/ui/Pagination';
 import Link from 'next/link';
 import ProductFormModal, { ProductData } from '@/components/almacen/ProductFormModal';
@@ -207,6 +207,13 @@ export default function AlmacenPage() {
             <FileSpreadsheet size={16} />
             Exportar Excel
           </button>
+          <Link
+            href="/productos/conteo"
+            className="flex items-center gap-2 bg-white border border-gray-200 text-primary px-5 py-3 text-sm font-semibold hover:border-primary hover:bg-gray-50 transition-all shadow-sm"
+          >
+            <ClipboardList size={16} />
+            Conteo Físico
+          </Link>
           <button
             onClick={handleNewClick}
             className="flex items-center gap-2 bg-primary text-background px-5 py-3 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"

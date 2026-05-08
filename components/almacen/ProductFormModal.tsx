@@ -290,14 +290,17 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                       <input value={newCatName} onChange={e => setNewCatName(e.target.value)} type="text" placeholder="Nueva categoría..." className="flex-1 text-xs border border-gray-200 px-2 py-1 focus:outline-none focus:border-primary" />
                       <button type="button" onClick={handleAddCategory} className="bg-primary text-white px-2 py-1 text-xs hover:bg-primary-dark transition-colors"><Plus size={14} /></button>
                     </div>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {categories.map(c => (
-                        <span key={c.id} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 flex items-center gap-1 border border-gray-200">
-                          {c.name}
-                          <button type="button" onClick={() => handleRemoveCategory(c.id)} className="hover:text-red-500"><X size={10} /></button>
-                        </span>
-                      ))}
-                    </div>
+                    {categories.length > 0 && (
+                      <div className="mt-2 max-h-32 overflow-y-auto border border-gray-100 divide-y divide-gray-50">
+                        {categories.map(c => (
+                          <div key={c.id} className={`flex items-center justify-between px-3 py-1.5 text-[11px] transition-colors cursor-pointer ${formData.category_id === c.id ? 'bg-primary/5 text-primary font-semibold' : 'text-gray-500 hover:bg-gray-50'}`}
+                            onClick={() => handleChange('category_id', c.id)}>
+                            <span>{c.name}</span>
+                            <button type="button" onClick={e => { e.stopPropagation(); handleRemoveCategory(c.id); }} className="text-gray-300 hover:text-red-500 transition-colors ml-2 flex-shrink-0"><X size={10} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2 p-4 border border-gray-100 bg-white">
@@ -316,14 +319,17 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                       <input value={newUnitName} onChange={e => setNewUnitName(e.target.value)} type="text" placeholder="Nueva unidad..." className="flex-1 text-xs border border-gray-200 px-2 py-1 focus:outline-none focus:border-primary" />
                       <button type="button" onClick={handleAddUnit} className="bg-primary text-white px-2 py-1 text-xs hover:bg-primary-dark transition-colors"><Plus size={14} /></button>
                     </div>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {units.map(u => (
-                        <span key={u.id} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 flex items-center gap-1 border border-gray-200">
-                          {u.name}
-                          <button type="button" onClick={() => handleRemoveUnit(u.id)} className="hover:text-red-500"><X size={10} /></button>
-                        </span>
-                      ))}
-                    </div>
+                    {units.length > 0 && (
+                      <div className="mt-2 max-h-32 overflow-y-auto border border-gray-100 divide-y divide-gray-50">
+                        {units.map(u => (
+                          <div key={u.id} className={`flex items-center justify-between px-3 py-1.5 text-[11px] transition-colors cursor-pointer ${formData.unit_id === u.id ? 'bg-primary/5 text-primary font-semibold' : 'text-gray-500 hover:bg-gray-50'}`}
+                            onClick={() => handleChange('unit_id', u.id)}>
+                            <span>{u.name}</span>
+                            <button type="button" onClick={e => { e.stopPropagation(); handleRemoveUnit(u.id); }} className="text-gray-300 hover:text-red-500 transition-colors ml-2 flex-shrink-0"><X size={10} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                 </div>
