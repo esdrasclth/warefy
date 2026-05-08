@@ -1,10 +1,12 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { Search, Plus, MapPin, Users, Loader2, Save, X, BookOpen, Edit2, Trash2, Key, Shield, Mail, Lock } from 'lucide-react';
+import { useToast } from '@/components/ui/Toast';
 import { supabase } from '@/utils/supabase/client';
 import type { Area, Employee } from '@/types';
 
 export default function EmpleadosPage() {
+  const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -86,8 +88,9 @@ export default function EmpleadosPage() {
     setIsSubmitting(false);
 
     if (error) {
-      alert('Error creando área: ' + error.message);
+      toast.error('Error creando área: ' + error.message);
     } else {
+      toast.success('Área creada correctamente.');
       setNewArea({ name: '', description: '' });
       setIsAreaModalOpen(false);
       fetchData();
@@ -107,8 +110,9 @@ export default function EmpleadosPage() {
     setIsSubmitting(false);
 
     if (error) {
-      alert('Error registrando empleado: ' + error.message);
+      toast.error('Error registrando empleado: ' + error.message);
     } else {
+      toast.success('Empleado registrado correctamente.');
       closeEmployeeModal();
       fetchData();
     }
@@ -133,8 +137,9 @@ export default function EmpleadosPage() {
     setIsSubmitting(false);
 
     if (error) {
-      alert('Error actualizando empleado: ' + error.message);
+      toast.error('Error actualizando empleado: ' + error.message);
     } else {
+      toast.success('Empleado actualizado correctamente.');
       closeEmployeeModal();
       fetchData();
     }
@@ -145,7 +150,7 @@ export default function EmpleadosPage() {
       setIsLoading(true);
       const { error } = await supabase.from('employees').delete().eq('id', id);
       if (error) {
-        alert('Error al eliminar empleado: ' + error.message);
+        toast.error('Error al eliminar empleado: ' + error.message);
         setIsLoading(false);
       } else {
         fetchData();

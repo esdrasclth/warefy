@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Save, Search, Loader2, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { useToast } from '@/components/ui/Toast';
+import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 
 interface ProductRow {
@@ -18,6 +20,7 @@ interface ProductRow {
 }
 
 export default function ConteoPage() {
+  const toast = useToast();
   const [rows, setRows] = useState<ProductRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -86,11 +89,12 @@ export default function ConteoPage() {
 
     const errors = results.filter(r => r.error);
     if (errors.length > 0) {
-      alert(`${errors.length} artículo(s) no pudieron guardarse. Intenta de nuevo.`);
+      toast.error(`${errors.length} artículo(s) no pudieron guardarse. Intenta de nuevo.`);
     }
 
     const saved = results.length - errors.length;
     setSavedCount(saved);
+    if (saved > 0) toast.success(`${saved} artículo${saved !== 1 ? 's' : ''} guardado${saved !== 1 ? 's' : ''} correctamente.`);
 
     // Sync originals for successfully saved rows
     setRows(prev =>
@@ -185,9 +189,7 @@ export default function ConteoPage() {
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 size={28} className="animate-spin text-primary" />
-          </div>
+          <table className="w-full"><tbody><TableSkeleton rows={10} cols={9} /></tbody></table>
         ) : (
           <div className="overflow-x-auto scrollbar-hide">
             <table className="w-full text-left border-collapse min-w-[700px]">

@@ -1,6 +1,8 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Printer, Trash2, Eye, Loader2, Check, X, TrendingUp, ClipboardList, Wallet, Activity, ChevronDown, ChevronRight } from 'lucide-react';
+import { useToast } from '@/components/ui/Toast';
+import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Pagination from '@/components/ui/Pagination';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
@@ -16,6 +18,7 @@ interface AreaMetrics {
 }
 
 export default function RequisarPage() {
+  const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODAS' | RequisitionStatus>('TODAS');
 
@@ -207,7 +210,7 @@ export default function RequisarPage() {
         // Revertir si falla
         setRequisitions(snapshot);
         setTotalCount(prev => prev + 1);
-        alert('Error eliminando requisa: ' + error.message);
+        toast.error('Error eliminando requisa: ' + error.message);
       }
     }
   };
@@ -229,7 +232,7 @@ export default function RequisarPage() {
       } catch (error: any) {
         // Revertir si falla
         setRequisitions(snapshot);
-        alert('Error actualizando estado: ' + error.message);
+        toast.error('Error actualizando estado: ' + error.message);
       }
     }
   };
@@ -403,7 +406,9 @@ export default function RequisarPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {requisitions.length > 0 ? (
+              {isLoading ? (
+                <TableSkeleton rows={10} cols={8} />
+              ) : requisitions.length > 0 ? (
                 requisitions.map((req) => {
                   const totalItems = req.requisition_items?.reduce((acc: number, curr: RequisitionItem) => acc + (curr.quantity || 0), 0) || 0;
                   const dateStr = req.created_at ? new Date(req.created_at).toLocaleDateString() : '-';
@@ -547,7 +552,7 @@ export default function RequisarPage() {
               ) : (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-gray-400 text-sm">
-                    {isLoading ? 'Cargando requisas...' : 'No se encontraron requisas con los filtros actuales.'}
+                    No se encontraron requisas con los filtros actuales.
                   </td>
                 </tr>
               )}

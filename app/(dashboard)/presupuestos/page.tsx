@@ -1,9 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { DollarSign, Package, Save, Loader2, AlertCircle, Search } from 'lucide-react';
+import { useToast } from '@/components/ui/Toast';
 import { supabase } from '@/utils/supabase/client';
 
 export default function PresupuestosPage() {
+  const toast = useToast();
   const [areas, setAreas] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   
@@ -55,7 +57,8 @@ export default function PresupuestosPage() {
       { onConflict: 'area_id' }
     );
 
-    if (error) alert('Error guardando presupuesto: ' + error.message);
+    if (error) toast.error('Error guardando presupuesto: ' + error.message);
+    else toast.success('Presupuesto guardado.');
     setSavingArea(null);
   };
 
@@ -68,7 +71,8 @@ export default function PresupuestosPage() {
       { onConflict: 'inventory_item_id' }
     );
 
-    if (error) alert('Error guardando límite: ' + error.message);
+    if (error) toast.error('Error guardando límite: ' + error.message);
+    else toast.success('Límite de producto guardado.');
     setSavingProduct(null);
   };
 

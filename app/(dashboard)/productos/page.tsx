@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, Trash2, Eye, Loader2, FileSpreadsheet, ClipboardList } from 'lucide-react';
 import Pagination from '@/components/ui/Pagination';
+import { useToast } from '@/components/ui/Toast';
+import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Link from 'next/link';
 import ProductFormModal, { ProductData } from '@/components/almacen/ProductFormModal';
 import { supabase } from '@/utils/supabase/client';
@@ -10,6 +12,7 @@ import type { InventoryItem } from '@/types';
 const ITEMS_PER_PAGE = 50;
 
 export default function AlmacenPage() {
+  const toast = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [productToEdit, setProductToEdit] = useState<ProductData | null>(null);
@@ -71,7 +74,7 @@ export default function AlmacenPage() {
     } catch (error: unknown) {
       console.error('Error fetching inventory:', error);
       const message = error instanceof Error ? error.message : 'Error inesperado.';
-      alert('Error cargando datos: ' + message);
+      toast.error('Error cargando datos: ' + message);
     }
     setIsLoading(false);
   };
@@ -124,13 +127,13 @@ export default function AlmacenPage() {
         reqCount > 0 ? `${reqCount} requisa(s)` : '',
         ocCount > 0 ? `${ocCount} orden(es) de compra` : '',
       ].filter(Boolean).join(' y ');
-      alert(`No se puede eliminar "${itemName}".\n\nEste artículo está referenciado en ${refs} y eliminarlo corrompería el historial.\n\nSugerencia: márcalo como INACTIVO en su lugar.`);
+      toast.error(`"${itemName}" tiene ${refs}. Márcalo como INACTIVO en lugar de eliminarlo.`);
       return;
     }
 
     if (!confirm(`¿Eliminar "${itemName}"? Esta acción no se puede deshacer.`)) return;
     const { error } = await supabase.from('inventory_items').delete().eq('id', idToDelete);
-    if (error) alert('Error eliminando: ' + error.message);
+    if (error) toast.error('Error eliminando: ' + error.message);
     else fetchItems();
   };
 
@@ -158,7 +161,7 @@ export default function AlmacenPage() {
 
   const handleExportExcel = async () => {
     if (filteredItems.length === 0) {
-      alert('No hay datos para exportar.');
+      toast.warning('No hay datos para exportar.');
       return;
     }
 
@@ -264,11 +267,6 @@ export default function AlmacenPage() {
           </h2>
         </div>
 
-        {isLoading ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-sm z-20">
-            <Loader2 size={32} className="animate-spin text-primary" />
-          </div>
-        ) : null}
 
         <div className="overflow-x-auto scrollbar-hide">
           <table className="w-full text-left border-collapse table-fixed min-w-[1200px] lg:min-w-full">
@@ -290,7 +288,9 @@ export default function AlmacenPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {paginatedItems.length > 0 ? (
+              {isLoading ? (
+                <TableSkeleton rows={12} cols={13} />
+              ) : paginatedItems.length > 0 ? (
                 paginatedItems.map((item) => {
                   const stock = item.quantity || 0;
                   const committed = item.committed_quantity || 0;
@@ -373,7 +373,7 @@ export default function AlmacenPage() {
               ) : (
                 <tr>
                   <td colSpan={13} className="px-5 py-12 text-center text-gray-400 text-sm">
-                    {isLoading ? 'Cargando inventario...' : 'No se encontraron artículos que coincidan con la búsqueda.'}
+                    No se encontraron artículos que coincidan con la búsqueda.
                   </td>
                 </tr>
               )}

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save, Loader2, Search, Trash2, X, Building2 } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
+import { useToast } from '@/components/ui/Toast';
 
 interface InventoryItem {
   id: string;
@@ -32,6 +33,7 @@ interface Supplier {
 export default function EditarCompraView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const toast = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -68,11 +70,11 @@ export default function EditarCompraView({ params }: { params: Promise<{ id: str
         .single();
 
       if (error) {
-        alert('Error cargando compra');
+        toast.error('Error cargando compra');
         router.push('/compras');
       } else {
         if (data.status !== 'PENDIENTE') {
-          alert('Solo se pueden editar compras en estado PENDIENTE.');
+          toast.warning('Solo se pueden editar compras en estado PENDIENTE.');
           router.push(`/compras/${id}`);
           return;
         }
@@ -149,7 +151,7 @@ export default function EditarCompraView({ params }: { params: Promise<{ id: str
 
   const handleSubmit = async () => {
     if (!selectedSupplier || selectedItems.length === 0) {
-      alert('Debes seleccionar un proveedor y agregar artículos.');
+      toast.warning('Debes seleccionar un proveedor y agregar artículos.');
       return;
     }
 
@@ -183,7 +185,7 @@ export default function EditarCompraView({ params }: { params: Promise<{ id: str
 
       router.push('/compras');
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      toast.error('Error: ' + error.message);
       setIsSaving(false);
     }
   };

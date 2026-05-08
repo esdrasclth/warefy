@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, Download, Calendar, FileSpreadsheet, Search } from 'lucide-react';
+import { useToast } from '@/components/ui/Toast';
+import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Pagination from '@/components/ui/Pagination';
 import { supabase } from '@/utils/supabase/client';
 import type { InventoryItem, Requisition, RequisitionItem } from '@/types';
@@ -31,6 +33,7 @@ interface RegistroQueryItem extends RequisitionItem {
 }
 
 export default function RegistrosPage() {
+  const toast = useToast();
   const [rows, setRows] = useState<RegistroRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
@@ -182,7 +185,7 @@ export default function RegistrosPage() {
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const handleExportExcel = async () => {
-    if (!dateFrom || !dateTo) return alert('Selecciona un rango de fechas válido.');
+    if (!dateFrom || !dateTo) { toast.warning('Selecciona un rango de fechas válido.'); return; }
     setIsExporting(true);
     try {
       const { data, error } = await supabase
@@ -211,7 +214,7 @@ export default function RegistrosPage() {
         .lte('requisitions.created_at', `${dateTo}T23:59:59Z`)
         .order('requisitions(created_at)', { ascending: false });
 
-      if (error) { alert('Error al exportar: ' + error.message); return; }
+      if (error) { toast.error('Error al exportar: ' + error.message); return; }
 
       const exportRows = (data || []).map((item: any) => {
         const req = item.requisitions as any;
@@ -248,7 +251,7 @@ export default function RegistrosPage() {
       XLSX.utils.book_append_sheet(wb, ws, 'Registros');
       XLSX.writeFile(wb, `registros_${dateFrom}_${dateTo}.xlsx`);
     } catch (e: any) {
-      alert('Error inesperado: ' + e.message);
+      toast.error('Error inesperado: ' + e.message);
     } finally {
       setIsExporting(false);
     }
@@ -325,9 +328,7 @@ export default function RegistrosPage() {
 
         <div className="overflow-x-auto">
           {isLoading ? (
-            <div className="flex items-center justify-center py-24">
-              <Loader2 size={28} className="animate-spin text-primary" />
-            </div>
+            <table className="w-full text-left text-sm"><tbody><TableSkeleton rows={12} cols={14} /></tbody></table>
           ) : rows.length === 0 ? (
             <div className="py-16 text-center text-gray-400 text-sm">
               No se encontraron registros.

@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/utils/supabase/client';
 import { Loader2 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
+import { ToastProvider } from '@/components/ui/Toast';
 import type { UserProfile } from '@/types';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -118,5 +119,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  return <AppLayout userProfile={profile ?? undefined}>{children}</AppLayout>;
+  return (
+    <ToastProvider>
+      <AppLayout userProfile={profile ?? undefined}>{children}</AppLayout>
+    </ToastProvider>
+  );
 }

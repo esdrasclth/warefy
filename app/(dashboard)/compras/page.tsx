@@ -5,10 +5,13 @@ import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import type { Purchase } from '@/types';
+import { useToast } from '@/components/ui/Toast';
+import { TableSkeleton } from '@/components/ui/TableSkeleton';
 
 type PurchaseStatus = 'PENDIENTE' | 'RECIBIDA' | 'CANCELADA';
 
 export default function ComprasPage() {
+  const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODAS' | PurchaseStatus>('TODAS');
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -56,7 +59,7 @@ export default function ComprasPage() {
   const handleDelete = async (id: string) => {
     if (confirm('¿Estás seguro de eliminar esta compra permanentemente?')) {
       const { error } = await supabase.from('purchases').delete().eq('id', id);
-      if (error) alert('Error: ' + error.message);
+      if (error) toast.error('Error: ' + error.message);
       else fetchPurchases();
     }
   };
@@ -72,16 +75,16 @@ export default function ComprasPage() {
 
       if (error) throw error;
 
-      alert('Compra recibida e inventario actualizado con éxito.');
+      toast.success('Compra recibida e inventario actualizado con éxito.');
       fetchPurchases();
     } catch (error: any) {
-      alert('Error al recibir compra: ' + error.message);
+      toast.error('Error al recibir compra: ' + error.message);
     }
   };
 
   const updateStatus = async (id: string, newStatus: PurchaseStatus) => {
     const { error } = await supabase.from('purchases').update({ status: newStatus }).eq('id', id);
-    if (error) alert('Error: ' + error.message);
+    if (error) toast.error('Error: ' + error.message);
     else fetchPurchases();
   };
 
@@ -167,7 +170,7 @@ export default function ComprasPage() {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), 'Detalle');
       XLSX.writeFile(wb, `Reporte_Compras_${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (err: any) {
-      alert('Error al exportar: ' + err.message);
+      toast.error('Error al exportar: ' + err.message);
     } finally {
       setIsExporting(false);
     }
@@ -281,7 +284,9 @@ export default function ComprasPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredPurchases.length > 0 ? (
+              {isLoading ? (
+                <TableSkeleton rows={8} cols={8} />
+              ) : filteredPurchases.length > 0 ? (
                 filteredPurchases.map((p) => (
                   <React.Fragment key={p.id}>
                   <tr className={`transition-colors group cursor-pointer ${expandedRows.has(p.id) ? 'bg-blue-50/30' : 'hover:bg-blue-50/20'}`} onClick={() => toggleRow(p.id)}>
@@ -423,7 +428,7 @@ export default function ComprasPage() {
               ) : (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-gray-400 text-sm">
-                    {isLoading ? 'Cargando compras...' : 'No se encontraron compras.'}
+                    No se encontraron compras.
                   </td>
                 </tr>
               )}

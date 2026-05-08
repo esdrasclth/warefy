@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { X, Plus, Save, Loader2 } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import ImageUpload from '@/components/inventory/ImageUpload';
+import { useToast } from '@/components/ui/Toast';
 
 export interface Category { id: string; name: string; }
 export interface Unit { id: string; name: string; abbreviation?: string; }
@@ -30,10 +31,12 @@ interface ProductFormModalProps {
 }
 
 export default function ProductFormModal({ isOpen, productToEdit, onClose, onSaveSuccess }: ProductFormModalProps) {
+  const toast = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [initialFormJson, setInitialFormJson] = useState('');
 
   const [newCatName, setNewCatName] = useState('');
   const [newUnitName, setNewUnitName] = useState('');
@@ -87,6 +90,10 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
       setRawValue('');
     }
     setUseHnlConverter(false);
+    // Snapshot for dirty-check (after state settles)
+    setTimeout(() => {
+      setInitialFormJson(JSON.stringify(productToEdit ?? {}));
+    }, 0);
   }, [productToEdit, isOpen]);
 
   const handleChange = (field: keyof ProductData, value: string | number) => {
@@ -130,7 +137,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
     const cat = categories.find(c => c.id === id);
     const { count } = await supabase.from('inventory_items').select('id', { count: 'exact', head: true }).eq('category_id', id);
     if (count && count > 0) {
-      alert(`No se puede eliminar "${cat?.name}".\n\nHay ${count} producto(s) usando esta categoría.`);
+      toast.error(`No se puede eliminar "${cat?.name}": hay ${count} producto(s) usándola.`);
       return;
     }
     if (!confirm(`¿Eliminar categoría "${cat?.name}"?`)) return;
@@ -139,7 +146,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
       setCategories(categories.filter(c => c.id !== id));
       if (formData.category_id === id) setFormData(prev => ({ ...prev, category_id: '' }));
     } else {
-      alert('Error eliminando: ' + error.message);
+      toast.error('Error eliminando: ' + error.message);
     }
   };
 
@@ -159,7 +166,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
     const unit = units.find(u => u.id === id);
     const { count } = await supabase.from('inventory_items').select('id', { count: 'exact', head: true }).eq('unit_id', id);
     if (count && count > 0) {
-      alert(`No se puede eliminar "${unit?.name}".\n\nHay ${count} producto(s) usando esta unidad.`);
+      toast.error(`No se puede eliminar "${unit?.name}": hay ${count} producto(s) usándola.`);
       return;
     }
     if (!confirm(`¿Eliminar unidad "${unit?.name}"?`)) return;
@@ -168,14 +175,14 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
       setUnits(units.filter(u => u.id !== id));
       if (formData.unit_id === id) setFormData(prev => ({ ...prev, unit_id: '' }));
     } else {
-      alert('Error eliminando: ' + error.message);
+      toast.error('Error eliminando: ' + error.message);
     }
   };
 
   const handleSubmit = async () => {
     // Basic validation
     if (!formData.code || !formData.name || !formData.category_id || !formData.unit_id) {
-      alert('Por favor complete todos los campos requeridos (Código, Nombre, Categoría, Unidad).');
+      toast.warning('Completa todos los campos requeridos: Código, Nombre, Categoría y Unidad.');
       return;
     }
     
@@ -220,9 +227,10 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
     setIsSaving(false);
 
     if (error) {
-       alert('Error guardando el artículo: ' + error.message);
-       console.error(error);
+      toast.error('Error guardando el artículo: ' + error.message);
+      console.error(error);
     } else {
+      toast.success(productToEdit ? 'Artículo actualizado correctamente.' : 'Artículo creado correctamente.');
       onSaveSuccess();
       onClose();
     }
@@ -237,7 +245,16 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
           <h2 className="text-xl font-light text-primary tracking-tight">
             {productToEdit ? 'Editar Artículo' : 'Nuevo Artículo'}
           </h2>
-          <button onClick={onClose} disabled={isSaving} className="text-gray-400 hover:text-red-500 transition-colors">
+          <button
+            onClick={() => {
+              const currentJson = JSON.stringify({ code: formData.code, name: formData.name, category_id: formData.category_id, unit_id: formData.unit_id, quantity: formData.quantity, price: formData.price, status: formData.status });
+              const initJson = JSON.stringify(productToEdit ? { code: productToEdit.code, name: productToEdit.name, category_id: productToEdit.category_id, unit_id: productToEdit.unit_id, quantity: productToEdit.quantity, price: productToEdit.price, status: productToEdit.status } : { code: '', name: '', category_id: '', unit_id: '', quantity: 0, price: 0, status: 'ACTIVE' });
+              if (currentJson !== initJson && !confirm('Tienes cambios sin guardar. ¿Cerrar de todas formas?')) return;
+              onClose();
+            }}
+            disabled={isSaving}
+            className="text-gray-400 hover:text-red-500 transition-colors"
+          >
             <X size={24} strokeWidth={1.5} />
           </button>
         </div>

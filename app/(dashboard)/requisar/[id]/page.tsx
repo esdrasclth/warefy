@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Loader2, FileText, Check, X, Printer, Package } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
+import { useToast } from '@/components/ui/Toast';
 import { use } from 'react'; // Explicit unwrap for params
 
 export default function RequisitionDetailsPage(props: { params: Promise<{ id: string }> }) {
@@ -11,6 +12,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
   const reqId = params.id;
   const searchParams = useSearchParams();
   
+  const toast = useToast();
   const [requisition, setRequisition] = useState<any | null>(null);
   const [userProfile, setUserProfile] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,7 +93,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
         if (data.error) throw new Error(data.error);
         fetchRequisition();
       } catch (error: any) {
-        alert('Error actualizando estado: ' + error.message);
+        toast.error('Error actualizando estado: ' + error.message);
         setIsLoading(false);
       }
     }

@@ -4,10 +4,12 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Check, X, Printer, Package, Building2, Calendar, ShoppingCart, MessageSquare, ClipboardList } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
+import { useToast } from '@/components/ui/Toast';
 
 export default function DetalleCompraPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const toast = useToast();
   const [purchase, setPurchase] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -35,7 +37,7 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
 
     if (error) {
       console.error(error);
-      alert('Error al cargar la compra');
+      toast.error('Error al cargar la compra');
     } else {
       setPurchase(data);
       // Initialize received quantities
@@ -98,10 +100,10 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
         })
         .eq('id', id);
 
-      alert('Compra recibida e inventario actualizado con éxito.');
+      toast.success('Compra recibida e inventario actualizado con éxito.');
       fetchPurchase();
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      toast.error('Error: ' + error.message);
     }
   };
 

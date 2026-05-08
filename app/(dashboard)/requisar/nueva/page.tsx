@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save, Loader2, Check, X, Search, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
+import { useToast } from '@/components/ui/Toast';
 
 // Extracted interfaces
 interface InventoryItem {
@@ -34,6 +35,7 @@ interface Employee {
 
 export default function NuevaRequisaView() {
   const router = useRouter();
+  const toast = useToast();
   const [isSaving, setIsSaving] = useState(false);
   
   // Requester State
@@ -88,14 +90,14 @@ export default function NuevaRequisaView() {
     const availableStock = item.quantity - (item.committed_quantity || 0);
 
     if (availableStock <= 0) {
-      alert(`Atención: El artículo ${item.code} no tiene stock disponible.`);
+      toast.warning(`El artículo ${item.code} no tiene stock disponible.`);
       return;
     }
     
     const exists = selectedItems.find(si => si.inventoryItem.id === item.id);
     if (exists) {
        if (exists.quantity + 1 > availableStock) {
-         alert(`No puedes solicitar más de ${availableStock} unidades.`);
+         toast.warning(`Máximo disponible: ${availableStock} unidades.`);
          return;
        }
        handleUpdateQuantity(item.id, exists.quantity + 1);
@@ -180,13 +182,13 @@ export default function NuevaRequisaView() {
 
   const handleSubmit = async () => {
     if (!requesterData || !approverData || selectedItems.length === 0) {
-      alert('Debes identificar al solicitante, al aprobador, y agregar al menos 1 artículo.');
+      toast.warning('Debes identificar al solicitante, al aprobador, y agregar al menos 1 artículo.');
       return;
     }
 
     const hasZeroQuantity = selectedItems.some(item => (item.quantity || 0) <= 0);
     if (hasZeroQuantity) {
-      alert('Asegúrate de que todos los artículos tengan una cantidad válida (mayor a 0).');
+      toast.warning('Asegúrate de que todos los artículos tengan cantidad mayor a 0.');
       return;
     }
 
@@ -305,7 +307,7 @@ export default function NuevaRequisaView() {
       
     } catch (error: any) {
       console.error(error);
-      alert('Error guardando la requisa: ' + error.message);
+      toast.error('Error guardando la requisa: ' + error.message);
       setIsSaving(false);
     }
   };

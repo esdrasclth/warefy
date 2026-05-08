@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save, Loader2, Search, Trash2, X, UserPlus, Building2, Printer } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
+import { useToast } from '@/components/ui/Toast';
 
 interface InventoryItem {
   id: string;
@@ -54,6 +55,7 @@ interface ReportData {
 
 export default function NuevaCompraView() {
   const router = useRouter();
+  const toast = useToast();
   const [isSaving, setIsSaving] = useState(false);
 
   // Supplier State
@@ -137,7 +139,7 @@ export default function NuevaCompraView() {
 
   const handleSubmit = async () => {
     if (!selectedSupplier || selectedItems.length === 0) {
-      alert('Debes seleccionar un proveedor y agregar artículos.');
+      toast.warning('Debes seleccionar un proveedor y agregar artículos.');
       return;
     }
 
@@ -262,7 +264,7 @@ export default function NuevaCompraView() {
       setIsLoadingReport(false);
 
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      toast.error('Error: ' + error.message);
       setIsSaving(false);
       setIsLoadingReport(false);
       setShowReportModal(false);
@@ -351,7 +353,7 @@ export default function NuevaCompraView() {
                           e.stopPropagation();
                           if (confirm(`¿Estás seguro de que deseas eliminar al proveedor "${s.name}"?`)) {
                             const { error } = await supabase.from('suppliers').delete().eq('id', s.id);
-                            if (error) alert('Error al eliminar: ' + error.message);
+                            if (error) toast.error('Error al eliminar: ' + error.message);
                             else setSupplierResults(supplierResults.filter(sr => sr.id !== s.id));
                           }
                         }}
@@ -805,6 +807,7 @@ function AuthorizationReportModal({
    Supplier Modal
 ───────────────────────────────────────────── */
 function SupplierModal({ onClose, onCreated }: { onClose: () => void, onCreated: (s: Supplier) => void }) {
+  const toast = useToast();
   const [name, setName] = useState('');
   const [taxId, setTaxId] = useState('');
   const [email, setEmail] = useState('');
@@ -826,7 +829,7 @@ function SupplierModal({ onClose, onCreated }: { onClose: () => void, onCreated:
       if (checkError) throw checkError;
 
       if (existing) {
-        alert(`Ya existe un proveedor con ese nombre o RTN: ${existing.name}`);
+        toast.warning(`Ya existe un proveedor con ese nombre o RTN: ${existing.name}`);
         setIsSaving(false);
         return;
       }
@@ -840,7 +843,7 @@ function SupplierModal({ onClose, onCreated }: { onClose: () => void, onCreated:
       if (error) throw error;
       onCreated(data);
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      toast.error('Error: ' + error.message);
     } finally {
       setIsSaving(false);
     }
