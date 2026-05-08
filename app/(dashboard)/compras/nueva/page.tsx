@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Save, Loader2, Search, Trash2, X, UserPlus, Building2, Printer } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
@@ -55,8 +55,10 @@ interface ReportData {
 
 export default function NuevaCompraView() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingDraft, setIsLoadingDraft] = useState(false);
 
   // Supplier State
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -79,6 +81,54 @@ export default function NuevaCompraView() {
   const [showReportModal, setShowReportModal] = useState(false);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
+
+  // Load draft from sugerencias
+  useEffect(() => {
+    if (searchParams.get('from') !== 'sugerencias') return;
+    const raw = sessionStorage.getItem('warefy_oc_draft');
+    if (!raw) return;
+
+    const draft = JSON.parse(raw) as {
+      supplier_id: string;
+      supplier_name: string;
+      items: { id: string; code: string; name: string; quantity: number; price: number }[];
+    };
+    sessionStorage.removeItem('warefy_oc_draft');
+
+    const load = async () => {
+      setIsLoadingDraft(true);
+      // Fetch full supplier object
+      const { data: supplierData } = await supabase
+        .from('suppliers')
+        .select('*')
+        .eq('id', draft.supplier_id)
+        .single();
+
+      if (supplierData) {
+        setSelectedSupplier(supplierData);
+        setSupplierSearch(supplierData.name);
+      }
+
+      // Fetch full inventory items
+      const ids = draft.items.map(i => i.id);
+      const { data: invData } = await supabase
+        .from('inventory_items')
+        .select('*, categories(name), units(name)')
+        .in('id', ids);
+
+      if (invData) {
+        const mapped = draft.items.map(di => {
+          const inv = invData.find(iv => iv.id === di.id);
+          return inv
+            ? { inventoryItem: inv as InventoryItem, quantity: di.quantity, unitCost: di.price }
+            : null;
+        }).filter(Boolean) as { inventoryItem: InventoryItem; quantity: number; unitCost: number }[];
+        setSelectedItems(mapped);
+      }
+      setIsLoadingDraft(false);
+    };
+    load();
+  }, []);
 
   // 1. Search Suppliers
   useEffect(() => {
@@ -281,7 +331,9 @@ export default function NuevaCompraView() {
           </Link>
           <div>
             <h1 className="text-3xl font-light text-primary tracking-tight">Nueva Compra</h1>
-            <p className="text-gray-500 mt-1 text-sm">Registra una nueva adquisición de suministros.</p>
+            <p className="text-gray-500 mt-1 text-sm">
+              {isLoadingDraft ? 'Cargando sugerencia...' : searchParams.get('from') === 'sugerencias' ? 'Pre-cargada desde Sugerencias de Compra.' : 'Registra una nueva adquisición de suministros.'}
+            </p>
           </div>
         </div>
 
