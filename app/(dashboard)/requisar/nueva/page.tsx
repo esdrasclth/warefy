@@ -190,6 +190,13 @@ export default function NuevaRequisaView() {
       return;
     }
 
+    const itemsWithoutPrice = selectedItems.filter(item => !item.inventoryItem.price || item.inventoryItem.price === 0);
+    if (itemsWithoutPrice.length > 0) {
+      const names = itemsWithoutPrice.map(i => i.inventoryItem.name).join('\n• ');
+      const proceed = confirm(`⚠ Advertencia: los siguientes artículos no tienen precio registrado:\n\n• ${names}\n\nEl costo histórico quedará en $0.00, lo que afectará los reportes.\n\n¿Deseas continuar de todas formas?`);
+      if (!proceed) return;
+    }
+
     setIsSaving(true);
     try {
       const totalCost = selectedItems.reduce((acc, curr) => acc + (curr.quantity * curr.inventoryItem.price), 0);
@@ -547,9 +554,15 @@ export default function NuevaRequisaView() {
                        </div>
                        <div className="flex flex-col items-end min-w-[80px]">
                          <span className="text-[9px] text-gray-400 uppercase tracking-widest">Subtotal</span>
-                         <span className="text-sm font-bold text-primary">
-                           ${(item.quantity * item.inventoryItem.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                         </span>
+                         {item.inventoryItem.price === 0 ? (
+                           <span className="text-xs font-bold text-orange-500 flex items-center gap-1">
+                             ⚠ Sin precio
+                           </span>
+                         ) : (
+                           <span className="text-sm font-bold text-primary">
+                             ${(item.quantity * item.inventoryItem.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                           </span>
+                         )}
                        </div>
                        <button onClick={() => handleRemoveItem(item.inventoryItem.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors mt-3 shrink-0">
                          <Trash2 size={16} />

@@ -110,12 +110,28 @@ export default function AlmacenPage() {
     };
   }, []);
 
-  const handleDelete = async (idToDelete: string) => {
-    if (confirm('¿Estás seguro de eliminar este artículo?')) {
-      const { error } = await supabase.from('inventory_items').delete().eq('id', idToDelete);
-      if (error) alert('Error eliminando: ' + error.message);
-      else fetchItems();
+  const handleDelete = async (idToDelete: string, itemName: string) => {
+    const [reqCheck, ocCheck] = await Promise.all([
+      supabase.from('requisition_items').select('id', { count: 'exact', head: true }).eq('inventory_item_id', idToDelete),
+      supabase.from('purchase_items').select('id', { count: 'exact', head: true }).eq('inventory_item_id', idToDelete),
+    ]);
+
+    const reqCount = reqCheck.count ?? 0;
+    const ocCount = ocCheck.count ?? 0;
+
+    if (reqCount > 0 || ocCount > 0) {
+      const refs = [
+        reqCount > 0 ? `${reqCount} requisa(s)` : '',
+        ocCount > 0 ? `${ocCount} orden(es) de compra` : '',
+      ].filter(Boolean).join(' y ');
+      alert(`No se puede eliminar "${itemName}".\n\nEste artículo está referenciado en ${refs} y eliminarlo corrompería el historial.\n\nSugerencia: márcalo como INACTIVO en su lugar.`);
+      return;
     }
+
+    if (!confirm(`¿Eliminar "${itemName}"? Esta acción no se puede deshacer.`)) return;
+    const { error } = await supabase.from('inventory_items').delete().eq('id', idToDelete);
+    if (error) alert('Error eliminando: ' + error.message);
+    else fetchItems();
   };
 
   const handleEditClick = (product: InventoryItem) => {
@@ -316,7 +332,9 @@ export default function AlmacenPage() {
                       <td className="py-2 px-3 text-[10px] text-right text-gray-400 font-mono">
                         {item.min_stock}/{item.max_stock}
                       </td>
-                      <td className="py-2 px-3 text-xs text-right text-gray-600 font-mono">${price.toFixed(2)}</td>
+                      <td className={`py-2 px-3 text-xs text-right font-mono ${price === 0 ? 'text-orange-400 font-bold' : 'text-gray-600'}`}>
+                        {price === 0 ? '⚠ $0.00' : `$${price.toFixed(2)}`}
+                      </td>
                       <td className="py-2 px-3 text-xs text-right font-bold text-primary font-mono">${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
 
                       <td className="py-2 px-3 text-center">
@@ -342,7 +360,7 @@ export default function AlmacenPage() {
                             <Edit2 size={14} strokeWidth={2} />
                           </button>
                           <button
-                            onClick={() => handleDelete(item.id)}
+                            onClick={() => handleDelete(item.id, item.name)}
                             className="text-gray-400 hover:text-red-500 transition-colors p-1" title="Eliminar"
                           >
                             <Trash2 size={14} strokeWidth={2} />

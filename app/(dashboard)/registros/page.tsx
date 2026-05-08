@@ -374,10 +374,12 @@ export default function RegistrosPage() {
                     <td className="py-2.5 px-3 font-mono text-xs text-gray-500 whitespace-nowrap">{row.codigo_solicitante}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-700 whitespace-nowrap">{row.nombre_solicitante}</td>
                     <td className="py-2.5 px-3 text-xs text-gray-600 whitespace-nowrap">{row.area}</td>
-                    <td className="py-2.5 px-3 text-right font-mono text-xs text-gray-500 whitespace-nowrap">
-                      ${row.precio_unitario.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    <td className={`py-2.5 px-3 text-right font-mono text-xs whitespace-nowrap ${row.precio_unitario === 0 && row.cantidad_entregada > 0 ? 'text-orange-400 font-bold' : 'text-gray-500'}`}>
+                      {row.precio_unitario === 0 && row.cantidad_entregada > 0
+                        ? '⚠ $0.00'
+                        : `$${row.precio_unitario.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-xs font-bold text-green-700 whitespace-nowrap">
+                    <td className={`py-2.5 px-3 text-right font-mono text-xs font-bold whitespace-nowrap ${row.precio_unitario === 0 && row.cantidad_entregada > 0 ? 'text-orange-400' : 'text-green-700'}`}>
                       ${row.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
                     <td className="py-2.5 px-3 text-xs text-gray-400 italic max-w-[200px] truncate" title={row.comments}>

@@ -127,11 +127,17 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
   };
 
   const handleRemoveCategory = async (id: string) => {
-    if (!confirm('Eliminar categoría?')) return;
+    const cat = categories.find(c => c.id === id);
+    const { count } = await supabase.from('inventory_items').select('id', { count: 'exact', head: true }).eq('category_id', id);
+    if (count && count > 0) {
+      alert(`No se puede eliminar "${cat?.name}".\n\nHay ${count} producto(s) usando esta categoría.`);
+      return;
+    }
+    if (!confirm(`¿Eliminar categoría "${cat?.name}"?`)) return;
     const { error } = await supabase.from('categories').delete().eq('id', id);
     if (!error) {
       setCategories(categories.filter(c => c.id !== id));
-      if (formData.category_id === id) setFormData(prev => ({...prev, category_id: ''}));
+      if (formData.category_id === id) setFormData(prev => ({ ...prev, category_id: '' }));
     } else {
       alert('Error eliminando: ' + error.message);
     }
@@ -150,11 +156,17 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
   };
 
   const handleRemoveUnit = async (id: string) => {
-    if (!confirm('Eliminar unidad?')) return;
+    const unit = units.find(u => u.id === id);
+    const { count } = await supabase.from('inventory_items').select('id', { count: 'exact', head: true }).eq('unit_id', id);
+    if (count && count > 0) {
+      alert(`No se puede eliminar "${unit?.name}".\n\nHay ${count} producto(s) usando esta unidad.`);
+      return;
+    }
+    if (!confirm(`¿Eliminar unidad "${unit?.name}"?`)) return;
     const { error } = await supabase.from('units').delete().eq('id', id);
     if (!error) {
       setUnits(units.filter(u => u.id !== id));
-      if (formData.unit_id === id) setFormData(prev => ({...prev, unit_id: ''}));
+      if (formData.unit_id === id) setFormData(prev => ({ ...prev, unit_id: '' }));
     } else {
       alert('Error eliminando: ' + error.message);
     }
