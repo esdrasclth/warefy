@@ -1,9 +1,12 @@
 'use client';
-import React, { useState, useEffect } from 'react';
-import { FileText, Plus, Search, Printer, Trash2, Eye, Loader2, Check, X, TrendingUp, ClipboardList, Wallet, Activity, Calendar, FileSpreadsheet, ChevronDown, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Search, Printer, Trash2, Eye, Loader2, Check, X, TrendingUp, ClipboardList, Wallet, Activity, Calendar, FileSpreadsheet, ChevronDown, ChevronRight } from 'lucide-react';
+import Pagination from '@/components/ui/Pagination';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import type { Requisition, RequisitionItem, RequisitionStatus, UserProfile } from '@/types';
+
+const ITEMS_PER_PAGE = 50;
 
 interface AreaMetrics {
   consumoMes: number;
@@ -17,9 +20,15 @@ export default function RequisarPage() {
   const [statusFilter, setStatusFilter] = useState<'TODAS' | RequisitionStatus>('TODAS');
 
   const [requisitions, setRequisitions] = useState<Requisition[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [areaMetrics, setAreaMetrics] = useState<AreaMetrics | null>(null);
+
+  const profileRef = useRef<UserProfile | null>(null);
+  const pageRef = useRef(0);
+  useEffect(() => { pageRef.current = page; }, [page]);
 
   const today = new Date();
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
@@ -30,6 +39,7 @@ export default function RequisarPage() {
   const [dateTo, setDateTo] = useState(todayStr);
   const [isExporting, setIsExporting] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
   const toggleRow = (id: string) => setExpandedRows(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);
@@ -86,87 +96,136 @@ export default function RequisarPage() {
       ? presupuestoAsignado - consumoMes
       : null;
 
-    setAreaMetrics({
-      consumoMes,
-      requisasMes: requisasMes || 0,
-      presupuestoAsignado,
-      presupuestoDisponible,
-    });
+    setAreaMetrics({ consumoMes, requisasMes: requisasMes || 0, presupuestoAsignado, presupuestoDisponible });
   };
 
-  const fetchProfileAndRequisitions = async () => {
+  const fetchRequisitions = async (
+    profile: UserProfile,
+    opts: { page: number; search: string; status: 'TODAS' | RequisitionStatus }
+  ) => {
+    const offset = opts.page * ITEMS_PER_PAGE;
     setIsLoading(true);
 
-    // 1. Obtener perfil
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*, employees(*)')
-      .eq('id', session.user.id)
-      .single();
-
-    setUserProfile(profile);
-    if (profile) {
-      await fetchAreaMetrics(profile);
-    }
-
-    // 2. Obtener requisas con filtro opcional
     let query = supabase
       .from('requisitions')
       .select(`
         *,
         requisition_items ( quantity, delivered_quantity, unit_cost, inventory_items ( name, code ) )
-      `);
+      `, { count: 'exact' });
 
-    // Si es Usuario Normal, filtrar por su área
-    if (profile?.role === 'USER' && profile.employees?.area_id) {
+    if (profile.role === 'USER' && profile.employees?.area_id) {
       query = query.eq('area_id', profile.employees.area_id);
     }
 
-    const { data, error } = await query.order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching requisitions:', error);
-    } else if (data) {
-      setRequisitions(data);
+    if (opts.status !== 'TODAS') {
+      query = query.eq('status', opts.status);
     }
+
+    if (opts.search.trim()) {
+      query = query.or(
+        `id.ilike.%${opts.search}%,area_name.ilike.%${opts.search}%,requester_name.ilike.%${opts.search}%`
+      );
+    }
+
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + ITEMS_PER_PAGE - 1);
+
+    if (!error && data) {
+      setRequisitions(data);
+      setTotalCount(count || 0);
+    } else if (error) {
+      console.error('Error fetching requisitions:', error);
+    }
+
     setIsLoading(false);
   };
 
+  // Carga inicial: perfil + métricas + primera página
   useEffect(() => {
-    fetchProfileAndRequisitions();
+    const init = async () => {
+      // Mostrar nueva requisa de inmediato si viene de crear una
+      const stored = sessionStorage.getItem('warefy_new_requisition');
+      if (stored) {
+        try {
+          const newReq = JSON.parse(stored);
+          sessionStorage.removeItem('warefy_new_requisition');
+          setRequisitions([newReq]);
+          setTotalCount(1);
+        } catch {}
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*, employees(*)')
+        .eq('id', session.user.id)
+        .single();
+
+      profileRef.current = profile;
+      setUserProfile(profile);
+
+      if (profile) {
+        await fetchAreaMetrics(profile);
+        await fetchRequisitions(profile, { page: 0, search: '', status: 'TODAS' });
+      }
+    };
+
+    init();
 
     const channel = supabase
       .channel('requisitions-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'requisitions' },
-        () => {
-          fetchProfileAndRequisitions();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'requisitions' }, () => {
+        if (profileRef.current) {
+          setSearchQuery(prev => { fetchRequisitions(profileRef.current!, { page: pageRef.current, search: prev, status: statusFilter }); return prev; });
         }
-      )
+      })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Re-fetch cuando cambian los filtros (resetea a página 0)
+  useEffect(() => {
+    if (!profileRef.current) return;
+    setPage(0);
+    fetchRequisitions(profileRef.current, { page: 0, search: searchQuery, status: statusFilter });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, statusFilter]);
+
+  // Re-fetch cuando cambia la página
+  useEffect(() => {
+    if (!profileRef.current) return;
+    fetchRequisitions(profileRef.current, { page, search: searchQuery, status: statusFilter });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
   const handleDelete = async (id: string) => {
-    // SECURITY: RLS policy 'requisitions_delete_admin' garantiza que
-    // solo ADMIN puede eliminar en la BD. Este botón solo se muestra
-    // en el frontend para ADMIN, pero el backend lo refuerza también.
     if (confirm(`¿Estás seguro de eliminar permanentemente la requisa?`)) {
+      // Optimistic: remover inmediatamente de la UI
+      const snapshot = requisitions;
+      setRequisitions(prev => prev.filter(r => r.id !== id));
+      setTotalCount(prev => prev - 1);
+
       const { error } = await supabase.from('requisitions').delete().eq('id', id);
-      if (error) alert('Error eliminando requisa: ' + error.message);
-      else fetchProfileAndRequisitions();
+      if (error) {
+        // Revertir si falla
+        setRequisitions(snapshot);
+        setTotalCount(prev => prev + 1);
+        alert('Error eliminando requisa: ' + error.message);
+      }
     }
   };
 
   const updateStatus = async (id: string, newStatus: RequisitionStatus) => {
     if (confirm(`¿Estás seguro de marcar esta requisa como ${newStatus}?`)) {
+      // Optimistic: actualizar estado en UI antes de esperar al servidor
+      const snapshot = requisitions;
+      setRequisitions(prev => prev.map(r => r.id === id ? { ...r, status: newStatus } : r));
+
       try {
         const response = await fetch('/api/requisitions/update-status', {
           method: 'POST',
@@ -175,14 +234,13 @@ export default function RequisarPage() {
         });
         const data = await response.json();
         if (data.error) throw new Error(data.error);
-        fetchProfileAndRequisitions();
       } catch (error: any) {
+        // Revertir si falla
+        setRequisitions(snapshot);
         alert('Error actualizando estado: ' + error.message);
       }
     }
   };
-
-
 
   const getStatusColor = (status: RequisitionStatus) => {
     switch (status) {
@@ -193,29 +251,6 @@ export default function RequisarPage() {
       default: return 'text-gray-500 border-gray-200 bg-gray-50';
     }
   };
-
-  const filteredRequisitions = requisitions.filter(req => {
-    const statusStr = (req.status || '').toUpperCase() as RequisitionStatus;
-    const areaStr = req.area_name || '';
-
-    // items count calculation
-    const totalItems = req.requisition_items?.reduce((acc: number, curr: RequisitionItem) => acc + (curr.quantity || 0), 0) || 0;
-
-    // 1. Status Filter
-    if (statusFilter !== 'TODAS' && statusStr !== statusFilter) return false;
-
-    // 2. Search Query (ID, Area, Status, Items)
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const match = req.id.toLowerCase().includes(q)
-        || areaStr.toLowerCase().includes(q)
-        || statusStr.toLowerCase().includes(q)
-        || totalItems.toString().includes(q);
-      if (!match) return false;
-    }
-
-    return true;
-  });
 
   const handleExportExcel = async () => {
     if (!dateFrom || !dateTo) return alert('Selecciona un rango de fechas válido.');
@@ -271,10 +306,8 @@ export default function RequisarPage() {
           const precioUnit = Number(item.unit_cost) || 0;
           const cantEntregada = Number(item.delivered_quantity ?? item.quantity) || 0;
           return {
-            'Fecha': req?.created_at
-              ? new Date(req.created_at).toLocaleDateString('es-HN') : '—',
-            'Número de Requisa': req?.consecutive
-              ? `REQ-${String(req.consecutive).padStart(6, '0')}` : '—',
+            'Fecha': req?.created_at ? new Date(req.created_at).toLocaleDateString('es-HN') : '—',
+            'Número de Requisa': req?.consecutive ? `REQ-${String(req.consecutive).padStart(6, '0')}` : '—',
             'Estado': req?.status || '—',
             'Área': req?.area_name || '—',
             'Código Producto': inv?.code || '—',
@@ -308,6 +341,8 @@ export default function RequisarPage() {
     }
   };
 
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -338,10 +373,7 @@ export default function RequisarPage() {
             disabled={isExporting}
             className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-4 h-10 text-sm font-bold tracking-wide transition-colors shadow-sm disabled:opacity-60"
           >
-            {isExporting
-              ? <Loader2 size={16} className="animate-spin" />
-              : <FileSpreadsheet size={16} />
-            }
+            {isExporting ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
             {isExporting ? 'Exportando…' : 'Descargar Excel'}
           </button>
           <Link
@@ -357,12 +389,10 @@ export default function RequisarPage() {
       {/* Métricas del Área */}
       {!isLoading && areaMetrics && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-white border border-gray-100 border-l-4 border-l-sky-500 p-4 shadow-sm">
+          <div className="bg-white border border-gray-100 p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                  Consumo del Mes
-                </p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Consumo del Mes</p>
                 <p className="text-xl font-light text-primary tracking-tight truncate">
                   ${areaMetrics.consumoMes.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
@@ -370,18 +400,14 @@ export default function RequisarPage() {
                   {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu área')}
                 </p>
               </div>
-              <div className="p-2 ml-3 shrink-0 bg-sky-500 text-white">
-                <TrendingUp size={16} strokeWidth={2} />
-              </div>
+              <div className="p-2 ml-3 shrink-0 bg-sky-500 text-white"><TrendingUp size={16} strokeWidth={2} /></div>
             </div>
           </div>
 
-          <div className="bg-white border border-gray-100 border-l-4 border-l-blue-500 p-4 shadow-sm">
+          <div className="bg-white border border-gray-100 p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                  Requisas del Mes
-                </p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Requisas del Mes</p>
                 <p className="text-xl font-light text-primary tracking-tight truncate">
                   {areaMetrics.requisasMes.toLocaleString()}
                 </p>
@@ -389,18 +415,14 @@ export default function RequisarPage() {
                   {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu área')}
                 </p>
               </div>
-              <div className="p-2 ml-3 shrink-0 bg-blue-500 text-white">
-                <ClipboardList size={16} strokeWidth={2} />
-              </div>
+              <div className="p-2 ml-3 shrink-0 bg-blue-500 text-white"><ClipboardList size={16} strokeWidth={2} /></div>
             </div>
           </div>
 
-          <div className="bg-white border border-gray-100 border-l-4 border-l-primary p-4 shadow-sm">
+          <div className="bg-white border border-gray-100 p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                  Presupuesto Asignado
-                </p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Presupuesto Asignado</p>
                 {areaMetrics.presupuestoAsignado === null ? (
                   <p className="text-gray-400 text-sm italic">Sin límite</p>
                 ) : (
@@ -412,18 +434,14 @@ export default function RequisarPage() {
                   {userProfile?.role === 'ADMIN' ? 'Global' : (userProfile?.employees?.area_name || 'Tu área')}
                 </p>
               </div>
-              <div className="p-2 ml-3 shrink-0 bg-primary text-white">
-                <Wallet size={16} strokeWidth={2} />
-              </div>
+              <div className="p-2 ml-3 shrink-0 bg-primary text-white"><Wallet size={16} strokeWidth={2} /></div>
             </div>
           </div>
 
-          <div className={`bg-white border border-gray-100 border-l-4 p-4 shadow-sm ${areaMetrics.presupuestoDisponible !== null && areaMetrics.presupuestoDisponible < 0 ? 'border-l-red-500' : 'border-l-green-500'}`}>
+          <div className="bg-white border border-gray-100 p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                  Presupuesto Disponible
-                </p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Presupuesto Disponible</p>
                 {areaMetrics.presupuestoDisponible === null ? (
                   <p className="text-gray-400 text-sm italic">Sin límite</p>
                 ) : (
@@ -451,7 +469,7 @@ export default function RequisarPage() {
           </div>
           <input
             type="text"
-            placeholder="Buscar por código, área, solicitante o estado..."
+            placeholder="Buscar por código, área o solicitante..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full py-2 bg-transparent text-sm focus:outline-none placeholder-gray-400 text-primary"
@@ -479,8 +497,13 @@ export default function RequisarPage() {
         {/* Table Header Bar */}
         <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
           <h2 className="text-xs font-bold text-white uppercase tracking-widest">
-            Listado de Requisas — {filteredRequisitions.length.toLocaleString()} resultados
+            Listado de Requisas — {totalCount.toLocaleString()} resultados
           </h2>
+          {totalPages > 1 && (
+            <span className="text-xs text-white/60 font-medium">
+              Página {page + 1} de {totalPages}
+            </span>
+          )}
         </div>
 
         {isLoading && (
@@ -503,8 +526,8 @@ export default function RequisarPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredRequisitions.length > 0 ? (
-                filteredRequisitions.map((req) => {
+              {requisitions.length > 0 ? (
+                requisitions.map((req) => {
                   const totalItems = req.requisition_items?.reduce((acc: number, curr: RequisitionItem) => acc + (curr.quantity || 0), 0) || 0;
                   const dateStr = req.created_at ? new Date(req.created_at).toLocaleDateString() : '-';
                   const isAdminOrAlmacen = userProfile?.role === 'ADMIN' || userProfile?.role === 'ALMACEN';
@@ -513,139 +536,134 @@ export default function RequisarPage() {
 
                   return (
                     <React.Fragment key={req.id}>
-                    <tr className={`transition-colors group cursor-pointer ${expandedRows.has(req.id) ? 'bg-blue-50/30' : 'hover:bg-blue-50/20'}`} onClick={() => toggleRow(req.id)}>
-                      <td className="py-2 px-6">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-primary">REQ-{String(req.consecutive || 0).padStart(6, '0')}</span>
-                          <span className="text-[9px] text-gray-400 font-mono truncate">{req.id.split('-')[0]}...</span>
-                        </div>
-                      </td>
-                      <td className="py-2 px-6">
-                        <span className="text-xs text-gray-700 font-medium truncate block">{req.area_name || 'Sin Área'}</span>
-                      </td>
-                      <td className="py-2 px-6">
-                        <span className="text-xs text-gray-600 truncate block">{req.requester_name || 'Anónimo'}</span>
-                      </td>
-                      <td className="py-2 px-6 text-xs text-gray-500 italic">
-                        {dateStr}
-                      </td>
-                      <td className="py-2 px-6 text-xs text-center font-bold text-primary">
-                        {totalItems}
-                      </td>
-                      <td className="py-2 px-6 text-center">
-                        <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border ${getStatusColor(req.status)}`}>
-                          {req.status}
-                        </span>
-                      </td>
-                      <td className="py-2 px-6 text-center sticky right-0 bg-white group-hover:bg-blue-50/20 transition-colors border-l border-gray-100 shadow-[ -5px_0_10px_-5px_rgba(0,0,0,0.05) ] z-10" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => toggleRow(req.id)}
-                            className={`transition-colors p-1 ${expandedRows.has(req.id) ? 'text-primary' : 'text-gray-400 hover:text-primary'}`}
-                            title="Ver detalle"
-                          >
-                            {expandedRows.has(req.id) ? <ChevronDown size={14} strokeWidth={2.5} /> : <ChevronRight size={14} strokeWidth={2.5} />}
-                          </button>
-                          {req.status === 'PENDIENTE' && (
-                            <>
-                              {isAdminOrAlmacen && (
-                                <button
-                                  onClick={() => updateStatus(req.id, 'ENTREGADA')}
-                                  className="p-1 text-gray-400 hover:text-green-600 transition-colors"
-                                  title="Entregar"
-                                >
-                                  <Check size={14} strokeWidth={3} />
-                                </button>
-                              )}
-                              {(isAdminOrAlmacen || (isUser && isOwnArea)) && (
-                                <button
-                                  onClick={() => updateStatus(req.id, 'CANCELADA')}
-                                  className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                                  title="Cancelar"
-                                >
-                                  <X size={14} strokeWidth={3} />
-                                </button>
-                              )}
-                            </>
-                          )}
-
-                          {req.status === 'PENDIENTE DE APROBACION' && isAdminOrAlmacen && (
+                      <tr className={`transition-colors group cursor-pointer ${expandedRows.has(req.id) ? 'bg-blue-50/30' : 'hover:bg-blue-50/20'}`} onClick={() => toggleRow(req.id)}>
+                        <td className="py-2 px-6">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-primary">REQ-{String(req.consecutive || 0).padStart(6, '0')}</span>
+                            <span className="text-[9px] text-gray-400 font-mono truncate">{req.id.split('-')[0]}...</span>
+                          </div>
+                        </td>
+                        <td className="py-2 px-6">
+                          <span className="text-xs text-gray-700 font-medium truncate block">{req.area_name || 'Sin Área'}</span>
+                        </td>
+                        <td className="py-2 px-6">
+                          <span className="text-xs text-gray-600 truncate block">{req.requester_name || 'Anónimo'}</span>
+                        </td>
+                        <td className="py-2 px-6 text-xs text-gray-500 italic">{dateStr}</td>
+                        <td className="py-2 px-6 text-xs text-center font-bold text-primary">{totalItems}</td>
+                        <td className="py-2 px-6 text-center">
+                          <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border ${getStatusColor(req.status)}`}>
+                            {req.status}
+                          </span>
+                        </td>
+                        <td className="py-2 px-6 text-center sticky right-0 bg-white group-hover:bg-blue-50/20 transition-colors border-l border-gray-100 shadow-[ -5px_0_10px_-5px_rgba(0,0,0,0.05) ] z-10" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-2">
                             <button
-                              onClick={() => updateStatus(req.id, 'PENDIENTE')}
-                              className="p-1 text-orange-400 hover:text-orange-600 transition-colors"
-                              title="Autorizar"
+                              onClick={() => toggleRow(req.id)}
+                              className={`transition-colors p-1 ${expandedRows.has(req.id) ? 'text-primary' : 'text-gray-400 hover:text-primary'}`}
+                              title="Ver detalle"
                             >
-                              <Check size={14} strokeWidth={3} />
+                              {expandedRows.has(req.id) ? <ChevronDown size={14} strokeWidth={2.5} /> : <ChevronRight size={14} strokeWidth={2.5} />}
                             </button>
-                          )}
-                          <Link
-                            href={`/requisar/${req.id}?print=true`}
-                            className="p-1 text-gray-400 hover:text-blue-500 transition-colors"
-                            title="Imprimir"
-                            onClick={e => e.stopPropagation()}
-                          >
-                            <Printer size={14} />
-                          </Link>
-                          <Link href={`/requisar/${req.id}`} className="p-1 text-gray-400 hover:text-primary transition-colors" title="Detalles" onClick={e => e.stopPropagation()}>
-                            <Eye size={14} />
-                          </Link>
-                          {userProfile?.role === 'ADMIN' && req.status !== 'ENTREGADA' && (
-                            <button
-                              onClick={() => handleDelete(req.id)}
-                              className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                              title="Eliminar"
+                            {req.status === 'PENDIENTE' && (
+                              <>
+                                {isAdminOrAlmacen && (
+                                  <button
+                                    onClick={() => updateStatus(req.id, 'ENTREGADA')}
+                                    className="p-1 text-gray-400 hover:text-green-600 transition-colors"
+                                    title="Entregar"
+                                  >
+                                    <Check size={14} strokeWidth={3} />
+                                  </button>
+                                )}
+                                {(isAdminOrAlmacen || (isUser && isOwnArea)) && (
+                                  <button
+                                    onClick={() => updateStatus(req.id, 'CANCELADA')}
+                                    className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                                    title="Cancelar"
+                                  >
+                                    <X size={14} strokeWidth={3} />
+                                  </button>
+                                )}
+                              </>
+                            )}
+                            {req.status === 'PENDIENTE DE APROBACION' && isAdminOrAlmacen && (
+                              <button
+                                onClick={() => updateStatus(req.id, 'PENDIENTE')}
+                                className="p-1 text-orange-400 hover:text-orange-600 transition-colors"
+                                title="Autorizar"
+                              >
+                                <Check size={14} strokeWidth={3} />
+                              </button>
+                            )}
+                            <Link
+                              href={`/requisar/${req.id}?print=true`}
+                              className="p-1 text-gray-400 hover:text-blue-500 transition-colors"
+                              title="Imprimir"
+                              onClick={e => e.stopPropagation()}
                             >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                    {expandedRows.has(req.id) && (
-                      <tr key={`${req.id}-detail`} className="bg-gray-50/80 border-b border-gray-100">
-                        <td colSpan={7} className="px-6 py-3">
-                          <div className="pl-4 border-l-2 border-primary/20">
-                            {(req.requisition_items as any[])?.length > 0 ? (
-                              <table className="w-full text-left text-xs">
-                                <thead>
-                                  <tr className="text-[9px] font-bold uppercase tracking-widest text-gray-400 border-b border-gray-200">
-                                    <th className="pb-1.5 pr-4">Código</th>
-                                    <th className="pb-1.5 pr-4">Producto</th>
-                                    <th className="pb-1.5 pr-4 text-right">Cant. Solicitada</th>
-                                    <th className="pb-1.5 pr-4 text-right">Cant. Entregada</th>
-                                    <th className="pb-1.5 pr-4 text-right">Costo Unit. ($)</th>
-                                    <th className="pb-1.5 text-right">Subtotal ($)</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                  {(req.requisition_items as any[]).map((item: any, i: number) => {
-                                    const qty = item.quantity ?? 0;
-                                    const delivered = item.delivered_quantity ?? (req.status === 'ENTREGADA' ? qty : null);
-                                    const unitCost = item.unit_cost ?? 0;
-                                    return (
-                                      <tr key={i} className="text-gray-600">
-                                        <td className="py-1.5 pr-4 font-mono text-[10px] text-gray-400">{item.inventory_items?.code || '-'}</td>
-                                        <td className="py-1.5 pr-4 font-medium text-gray-700">{item.inventory_items?.name || '-'}</td>
-                                        <td className="py-1.5 pr-4 text-right">{qty}</td>
-                                        <td className="py-1.5 pr-4 text-right">
-                                          {delivered !== null
-                                            ? <span className="text-green-600 font-semibold">{delivered}</span>
-                                            : <span className="text-gray-300">—</span>}
-                                        </td>
-                                        <td className="py-1.5 pr-4 text-right font-mono">{unitCost > 0 ? unitCost.toLocaleString(undefined, { minimumFractionDigits: 2 }) : <span className="text-gray-300">—</span>}</td>
-                                        <td className="py-1.5 text-right font-bold text-primary">{unitCost > 0 ? (qty * unitCost).toLocaleString(undefined, { minimumFractionDigits: 2 }) : <span className="text-gray-300">—</span>}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            ) : (
-                              <p className="text-xs text-gray-400 italic py-1">Sin productos registrados.</p>
+                              <Printer size={14} />
+                            </Link>
+                            <Link href={`/requisar/${req.id}`} className="p-1 text-gray-400 hover:text-primary transition-colors" title="Detalles" onClick={e => e.stopPropagation()}>
+                              <Eye size={14} />
+                            </Link>
+                            {userProfile?.role === 'ADMIN' && req.status !== 'ENTREGADA' && (
+                              <button
+                                onClick={() => handleDelete(req.id)}
+                                className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                                title="Eliminar"
+                              >
+                                <Trash2 size={14} />
+                              </button>
                             )}
                           </div>
                         </td>
                       </tr>
-                    )}
+                      {expandedRows.has(req.id) && (
+                        <tr key={`${req.id}-detail`} className="bg-gray-50/80 border-b border-gray-100">
+                          <td colSpan={7} className="px-6 py-3">
+                            <div className="pl-4 border-l-2 border-primary/20">
+                              {(req.requisition_items as any[])?.length > 0 ? (
+                                <table className="w-full text-left text-xs">
+                                  <thead>
+                                    <tr className="text-[9px] font-bold uppercase tracking-widest text-gray-400 border-b border-gray-200">
+                                      <th className="pb-1.5 pr-4">Código</th>
+                                      <th className="pb-1.5 pr-4">Producto</th>
+                                      <th className="pb-1.5 pr-4 text-right">Cant. Solicitada</th>
+                                      <th className="pb-1.5 pr-4 text-right">Cant. Entregada</th>
+                                      <th className="pb-1.5 pr-4 text-right">Costo Unit. ($)</th>
+                                      <th className="pb-1.5 text-right">Subtotal ($)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                    {(req.requisition_items as any[]).map((item: any, i: number) => {
+                                      const qty = item.quantity ?? 0;
+                                      const delivered = item.delivered_quantity ?? (req.status === 'ENTREGADA' ? qty : null);
+                                      const unitCost = item.unit_cost ?? 0;
+                                      return (
+                                        <tr key={i} className="text-gray-600">
+                                          <td className="py-1.5 pr-4 font-mono text-[10px] text-gray-400">{item.inventory_items?.code || '-'}</td>
+                                          <td className="py-1.5 pr-4 font-medium text-gray-700">{item.inventory_items?.name || '-'}</td>
+                                          <td className="py-1.5 pr-4 text-right">{qty}</td>
+                                          <td className="py-1.5 pr-4 text-right">
+                                            {delivered !== null
+                                              ? <span className="text-green-600 font-semibold">{delivered}</span>
+                                              : <span className="text-gray-300">—</span>}
+                                          </td>
+                                          <td className="py-1.5 pr-4 text-right font-mono">{unitCost > 0 ? unitCost.toLocaleString(undefined, { minimumFractionDigits: 2 }) : <span className="text-gray-300">—</span>}</td>
+                                          <td className="py-1.5 text-right font-bold text-primary">{unitCost > 0 ? (qty * unitCost).toLocaleString(undefined, { minimumFractionDigits: 2 }) : <span className="text-gray-300">—</span>}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              ) : (
+                                <p className="text-xs text-gray-400 italic py-1">Sin productos registrados.</p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </React.Fragment>
                   );
                 })
@@ -659,6 +677,15 @@ export default function RequisarPage() {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          pageSize={ITEMS_PER_PAGE}
+          itemLabel="requisas"
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

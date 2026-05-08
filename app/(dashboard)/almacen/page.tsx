@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, Eye, Loader2, Download, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Eye, Loader2, Download, FileSpreadsheet } from 'lucide-react';
+import Pagination from '@/components/ui/Pagination';
 import Link from 'next/link';
 import ProductFormModal, { ProductData } from '@/components/almacen/ProductFormModal';
 import { supabase } from '@/utils/supabase/client';
@@ -355,37 +356,14 @@ export default function AlmacenPage() {
           </table>
         </div>
 
-        {/* Pagination Controls */}
-        {totalPages > 0 && (
-          <div className="bg-gray-50 border-t border-gray-100 px-6 py-4 flex items-center justify-between">
-            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              Mostrando {startIndex + 1} - {Math.min(startIndex + ITEMS_PER_PAGE, filteredItems.length)} de {filteredItems.length}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="p-2 border border-gray-200 bg-white text-gray-500 hover:text-primary hover:border-primary disabled:opacity-30 disabled:hover:text-gray-500 disabled:hover:border-gray-200 transition-colors"
-              >
-                <ChevronLeft size={16} />
-              </button>
-
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] font-bold text-primary uppercase tracking-widest px-3">
-                  Página {currentPage} de {totalPages}
-                </span>
-              </div>
-
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="p-2 border border-gray-200 bg-white text-gray-500 hover:text-primary hover:border-primary disabled:opacity-30 disabled:hover:text-gray-500 disabled:hover:border-gray-200 transition-colors"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={currentPage - 1}
+          totalPages={totalPages}
+          totalCount={filteredItems.length}
+          pageSize={ITEMS_PER_PAGE}
+          itemLabel="productos"
+          onPageChange={(p) => setCurrentPage(p + 1)}
+        />
       </div>
 
       <ProductFormModal

@@ -281,7 +281,19 @@ export default function NuevaRequisaView() {
       
       const { error: itemsError } = await supabase.from('requisition_items').insert(reqItemsData);
       if (itemsError) throw itemsError;
-      
+
+      // Pasar la nueva requisa a la lista para mostrarla de inmediato (sin esperar fetch)
+      const optimisticRequisition = {
+        ...reqData,
+        requisition_items: selectedItems.map(si => ({
+          quantity: si.quantity,
+          delivered_quantity: null,
+          unit_cost: si.inventoryItem.price,
+          inventory_items: { name: si.inventoryItem.name, code: si.inventoryItem.code }
+        }))
+      };
+      sessionStorage.setItem('warefy_new_requisition', JSON.stringify(optimisticRequisition));
+
       router.push('/requisar');
       
     } catch (error: any) {

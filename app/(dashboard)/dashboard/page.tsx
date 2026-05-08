@@ -34,6 +34,11 @@ interface CategoryChartRow {
   value: number;
 }
 
+interface AreaChartRow {
+  name: string;
+  consumido: number;
+}
+
 interface DashboardState {
   isLoading: boolean;
   metrics: {
@@ -47,8 +52,9 @@ interface DashboardState {
   stockAlerts: StockAlertItem[];
   timelineChartData: TimelineChartRow[];
   productChartDataByPeriod: Record<string, ProductChartRow[]>;
+  categoryChartDataByPeriod: Record<string, CategoryChartRow[]>;
+  areaChartDataByPeriod: Record<string, AreaChartRow[]>;
   budgetChartData: BudgetChartRow[];
-  categoryChartData: CategoryChartRow[];
 }
 
 type ProductPeriod = '1m' | '3m' | '6m' | '12m';
@@ -66,8 +72,9 @@ export default function DashboardPage() {
     stockAlerts: [],
     timelineChartData: [],
     productChartDataByPeriod: { '1m': [], '3m': [], '6m': [], '12m': [] },
+    categoryChartDataByPeriod: { '1m': [], '3m': [], '6m': [], '12m': [] },
+    areaChartDataByPeriod: { '1m': [], '3m': [], '6m': [], '12m': [] },
     budgetChartData: [],
-    categoryChartData: [],
   });
 
   // Fast queries: metrics, recent activity, stock alerts — called on realtime too
@@ -134,7 +141,6 @@ export default function DashboardPage() {
 
   // Heavy queries: chart data — only on initial load, not on realtime
   const fetchChartData = useCallback(async (month: Date) => {
-    const monthStart = new Date(month.getFullYear(), month.getMonth(), 1).toISOString();
     const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1).toISOString();
     const twelveMonthsAgo = new Date(month.getFullYear() - 1, month.getMonth(), 1).toISOString();
 
@@ -142,30 +148,36 @@ export default function DashboardPage() {
       { data: timelineItems },
       { data: productItems },
       { data: categoryItems },
+      { data: areaItems },
     ] = await Promise.all([
-      // Timeline: ENTREGADA only, using delivered_quantity for accurate cost
       supabase.from('requisition_items')
         .select('quantity, delivered_quantity, unit_cost, requisitions!inner(created_at, status)')
         .eq('requisitions.status', 'ENTREGADA')
         .gte('requisitions.created_at', twelveMonthsAgo)
         .lt('requisitions.created_at', monthEnd),
 
-      // Top products: ENTREGADA only, using delivered_quantity
       supabase.from('requisition_items')
         .select('inventory_item_id, quantity, delivered_quantity, unit_cost, inventory_items!inner(name, code), requisitions!inner(created_at, status)')
         .eq('requisitions.status', 'ENTREGADA')
         .gte('requisitions.created_at', twelveMonthsAgo)
         .lt('requisitions.created_at', monthEnd),
 
-      // Categories: ENTREGADA only, using delivered_quantity
+      // Categories: now 12 months to support period filtering
       supabase.from('requisition_items')
         .select('quantity, delivered_quantity, unit_cost, inventory_items!inner(categories(name)), requisitions!inner(created_at, status)')
         .eq('requisitions.status', 'ENTREGADA')
-        .gte('requisitions.created_at', monthStart)
+        .gte('requisitions.created_at', twelveMonthsAgo)
+        .lt('requisitions.created_at', monthEnd),
+
+      // Areas: 12 months for period filtering
+      supabase.from('requisition_items')
+        .select('quantity, delivered_quantity, unit_cost, requisitions!inner(area_name, created_at, status)')
+        .eq('requisitions.status', 'ENTREGADA')
+        .gte('requisitions.created_at', twelveMonthsAgo)
         .lt('requisitions.created_at', monthEnd),
     ]);
 
-    return { timelineItems, productItems, categoryItems, month };
+    return { timelineItems, productItems, categoryItems, areaItems, month };
   }, []);
 
   useEffect(() => {
@@ -178,9 +190,17 @@ export default function DashboardPage() {
           fetchChartData(selectedMonth),
         ]);
 
-        const { timelineItems, productItems, categoryItems, month } = chartData;
+        const { timelineItems, productItems, categoryItems, areaItems, month } = chartData;
 
-        // Build timeline map: 12 months ending at selected month, ENTREGADA + delivered_quantity
+        const mEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+        const periodCutoffs: Record<string, Date> = {
+          '1m': new Date(month.getFullYear(), month.getMonth(), 1),
+          '3m': new Date(month.getFullYear(), month.getMonth() - 2, 1),
+          '6m': new Date(month.getFullYear(), month.getMonth() - 5, 1),
+          '12m': new Date(month.getFullYear() - 1, month.getMonth(), 1),
+        };
+
+        // Timeline map
         const timelineMap: Record<string, number> = {};
         for (let i = 11; i >= 0; i--) {
           const d = new Date(month.getFullYear(), month.getMonth() - i, 1);
@@ -195,38 +215,50 @@ export default function DashboardPage() {
           }
         });
 
-        // Build top products map by period (relative to selected month)
-        const buildProdMap = (cutoff: Date, ceiling: Date) => {
+        // Products by period
+        const buildProdMap = (cutoff: Date) => {
           const map: Record<string, { code: string; name: string; cost: number }> = {};
           productItems?.forEach(item => {
             const req = item.requisitions as unknown as { created_at: string };
             const d = new Date(req.created_at);
-            if (d < cutoff || d >= ceiling) return;
+            if (d < cutoff || d >= mEnd) return;
             const inv = item.inventory_items as unknown as { name: string; code: string };
             const pid = item.inventory_item_id;
             const qty = (item.delivered_quantity ?? item.quantity) || 0;
-            const cost = qty * (item.unit_cost || 0);
             if (!map[pid]) map[pid] = { code: inv?.code || 'N/A', name: inv?.name || 'Item', cost: 0 };
-            map[pid].cost += cost;
+            map[pid].cost += qty * (item.unit_cost || 0);
           });
           return Object.values(map).sort((a, b) => b.cost - a.cost).slice(0, 15);
         };
-        const mEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
-        const productChartDataByPeriod = {
-          '1m': buildProdMap(new Date(month.getFullYear(), month.getMonth(), 1), mEnd),
-          '3m': buildProdMap(new Date(month.getFullYear(), month.getMonth() - 2, 1), mEnd),
-          '6m': buildProdMap(new Date(month.getFullYear(), month.getMonth() - 5, 1), mEnd),
-          '12m': buildProdMap(new Date(month.getFullYear() - 1, month.getMonth(), 1), mEnd),
+
+        // Categories by period
+        const buildCatMap = (cutoff: Date) => {
+          const map: Record<string, number> = {};
+          categoryItems?.forEach(item => {
+            const req = item.requisitions as unknown as { created_at: string };
+            const d = new Date(req.created_at);
+            if (d < cutoff || d >= mEnd) return;
+            const inv = item.inventory_items as unknown as { categories?: { name: string } | null };
+            const catName = inv?.categories?.name || 'Sin Categoría';
+            const qty = (item.delivered_quantity ?? item.quantity) || 0;
+            map[catName] = (map[catName] || 0) + qty * (item.unit_cost || 0);
+          });
+          return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
         };
 
-        // Build categories map: ENTREGADA + delivered_quantity
-        const catMap: Record<string, number> = {};
-        categoryItems?.forEach(item => {
-          const inv = item.inventory_items as unknown as { categories?: { name: string } | null };
-          const catName = inv?.categories?.name || 'Sin Categoría';
-          const qty = (item.delivered_quantity ?? item.quantity) || 0;
-          catMap[catName] = (catMap[catName] || 0) + qty * (item.unit_cost || 0);
-        });
+        // Areas by period
+        const buildAreaMap = (cutoff: Date) => {
+          const map: Record<string, number> = {};
+          areaItems?.forEach(item => {
+            const req = item.requisitions as unknown as { area_name: string; created_at: string };
+            const d = new Date(req.created_at);
+            if (d < cutoff || d >= mEnd) return;
+            const areaName = req.area_name || 'Sin Área';
+            const qty = (item.delivered_quantity ?? item.quantity) || 0;
+            map[areaName] = (map[areaName] || 0) + qty * (item.unit_cost || 0);
+          });
+          return Object.entries(map).map(([name, consumido]) => ({ name, consumido })).sort((a, b) => b.consumido - a.consumido);
+        };
 
         setState({
           isLoading: false,
@@ -235,8 +267,24 @@ export default function DashboardPage() {
             mes: mes.charAt(0).toUpperCase() + mes.slice(1),
             consumo,
           })),
-          productChartDataByPeriod,
-          categoryChartData: Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+          productChartDataByPeriod: {
+            '1m': buildProdMap(periodCutoffs['1m']),
+            '3m': buildProdMap(periodCutoffs['3m']),
+            '6m': buildProdMap(periodCutoffs['6m']),
+            '12m': buildProdMap(periodCutoffs['12m']),
+          },
+          categoryChartDataByPeriod: {
+            '1m': buildCatMap(periodCutoffs['1m']),
+            '3m': buildCatMap(periodCutoffs['3m']),
+            '6m': buildCatMap(periodCutoffs['6m']),
+            '12m': buildCatMap(periodCutoffs['12m']),
+          },
+          areaChartDataByPeriod: {
+            '1m': buildAreaMap(periodCutoffs['1m']),
+            '3m': buildAreaMap(periodCutoffs['3m']),
+            '6m': buildAreaMap(periodCutoffs['6m']),
+            '12m': buildAreaMap(periodCutoffs['12m']),
+          },
         });
       } catch (err) {
         console.error('Data fetching error:', err);
@@ -254,8 +302,104 @@ export default function DashboardPage() {
     const channel = supabase
       .channel('dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'requisitions' }, async () => {
-        const liveData = await fetchLiveMetrics(selectedMonth);
-        setState(prev => ({ ...prev, ...liveData }));
+        // Requisition changes affect ALL charts (categories, timeline, products, areas)
+        const [liveData, chartData] = await Promise.all([
+          fetchLiveMetrics(selectedMonth),
+          fetchChartData(selectedMonth),
+        ]);
+
+        const { timelineItems, productItems, categoryItems, areaItems, month } = chartData;
+
+        const mEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+        const periodCutoffs: Record<string, Date> = {
+          '1m': new Date(month.getFullYear(), month.getMonth(), 1),
+          '3m': new Date(month.getFullYear(), month.getMonth() - 2, 1),
+          '6m': new Date(month.getFullYear(), month.getMonth() - 5, 1),
+          '12m': new Date(month.getFullYear() - 1, month.getMonth(), 1),
+        };
+
+        const timelineMap: Record<string, number> = {};
+        for (let i = 11; i >= 0; i--) {
+          const d = new Date(month.getFullYear(), month.getMonth() - i, 1);
+          timelineMap[d.toLocaleString('es-ES', { month: 'short', year: 'numeric' })] = 0;
+        }
+        timelineItems?.forEach(item => {
+          const req = item.requisitions as unknown as { created_at: string };
+          const key = new Date(req.created_at).toLocaleString('es-ES', { month: 'short', year: 'numeric' });
+          if (key in timelineMap) {
+            const qty = (item.delivered_quantity ?? item.quantity) || 0;
+            timelineMap[key] += qty * (item.unit_cost || 0);
+          }
+        });
+
+        const buildProdMap = (cutoff: Date) => {
+          const map: Record<string, { code: string; name: string; cost: number }> = {};
+          productItems?.forEach(item => {
+            const req = item.requisitions as unknown as { created_at: string };
+            const d = new Date(req.created_at);
+            if (d < cutoff || d >= mEnd) return;
+            const inv = item.inventory_items as unknown as { name: string; code: string };
+            const pid = item.inventory_item_id;
+            const qty = (item.delivered_quantity ?? item.quantity) || 0;
+            if (!map[pid]) map[pid] = { code: inv?.code || 'N/A', name: inv?.name || 'Item', cost: 0 };
+            map[pid].cost += qty * (item.unit_cost || 0);
+          });
+          return Object.values(map).sort((a, b) => b.cost - a.cost).slice(0, 15);
+        };
+
+        const buildCatMap = (cutoff: Date) => {
+          const map: Record<string, number> = {};
+          categoryItems?.forEach(item => {
+            const req = item.requisitions as unknown as { created_at: string };
+            const d = new Date(req.created_at);
+            if (d < cutoff || d >= mEnd) return;
+            const inv = item.inventory_items as unknown as { categories?: { name: string } | null };
+            const catName = inv?.categories?.name || 'Sin Categoría';
+            const qty = (item.delivered_quantity ?? item.quantity) || 0;
+            map[catName] = (map[catName] || 0) + qty * (item.unit_cost || 0);
+          });
+          return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+        };
+
+        const buildAreaMap = (cutoff: Date) => {
+          const map: Record<string, number> = {};
+          areaItems?.forEach(item => {
+            const req = item.requisitions as unknown as { area_name: string; created_at: string };
+            const d = new Date(req.created_at);
+            if (d < cutoff || d >= mEnd) return;
+            const areaName = req.area_name || 'Sin Área';
+            const qty = (item.delivered_quantity ?? item.quantity) || 0;
+            map[areaName] = (map[areaName] || 0) + qty * (item.unit_cost || 0);
+          });
+          return Object.entries(map).map(([name, consumido]) => ({ name, consumido })).sort((a, b) => b.consumido - a.consumido);
+        };
+
+        setState(prev => ({
+          ...prev,
+          ...liveData,
+          timelineChartData: Object.entries(timelineMap).map(([mes, consumo]) => ({
+            mes: mes.charAt(0).toUpperCase() + mes.slice(1),
+            consumo,
+          })),
+          productChartDataByPeriod: {
+            '1m': buildProdMap(periodCutoffs['1m']),
+            '3m': buildProdMap(periodCutoffs['3m']),
+            '6m': buildProdMap(periodCutoffs['6m']),
+            '12m': buildProdMap(periodCutoffs['12m']),
+          },
+          categoryChartDataByPeriod: {
+            '1m': buildCatMap(periodCutoffs['1m']),
+            '3m': buildCatMap(periodCutoffs['3m']),
+            '6m': buildCatMap(periodCutoffs['6m']),
+            '12m': buildCatMap(periodCutoffs['12m']),
+          },
+          areaChartDataByPeriod: {
+            '1m': buildAreaMap(periodCutoffs['1m']),
+            '3m': buildAreaMap(periodCutoffs['3m']),
+            '6m': buildAreaMap(periodCutoffs['6m']),
+            '12m': buildAreaMap(periodCutoffs['12m']),
+          },
+        }));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items' }, async () => {
         const liveData = await fetchLiveMetrics(selectedMonth);
@@ -266,8 +410,10 @@ export default function DashboardPage() {
     return () => { supabase.removeChannel(channel); };
   }, [selectedMonth, fetchLiveMetrics, fetchChartData]);
 
-  const { isLoading, metrics, recentActivity, stockAlerts, timelineChartData, productChartDataByPeriod, budgetChartData, categoryChartData } = state;
+  const { isLoading, metrics, recentActivity, stockAlerts, timelineChartData, productChartDataByPeriod, categoryChartDataByPeriod, areaChartDataByPeriod, budgetChartData } = state;
   const productChartData = productChartDataByPeriod[productPeriod] ?? [];
+  const categoryChartData = categoryChartDataByPeriod[productPeriod] ?? [];
+  const areaChartData = areaChartDataByPeriod[productPeriod] ?? [];
 
   const formatTimeAgo = (dateString: string) => {
     const diffMs = Date.now() - new Date(dateString).getTime();
@@ -291,11 +437,11 @@ export default function DashboardPage() {
   };
 
   const stats = [
-    { label: 'Total Productos', value: metrics.totalProducts.toLocaleString(), icon: Package, iconBg: 'bg-blue-600', iconColor: 'text-white', accent: 'border-l-blue-600' },
-    { label: 'Valor en Inventario', value: `$${metrics.totalInventoryValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: DollarSign, iconBg: 'bg-green-600', iconColor: 'text-white', accent: 'border-l-green-600' },
-    { label: 'Presupuesto Total', value: `$${metrics.totalBudget.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: Wallet, iconBg: 'bg-primary', iconColor: 'text-white', accent: 'border-l-primary' },
-    { label: 'Requisas (Mes)', value: metrics.totalRequisitionsMTD.toString(), icon: ClipboardList, iconBg: 'bg-purple-600', iconColor: 'text-white', accent: 'border-l-purple-600' },
-    { label: 'Gasto del Mes', value: `$${metrics.monthlyCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: Activity, iconBg: 'bg-sky-500', iconColor: 'text-white', accent: 'border-l-sky-500' },
+    { label: 'Total Productos', value: metrics.totalProducts.toLocaleString(), icon: Package, iconBg: 'bg-blue-600', iconColor: 'text-white' },
+    { label: 'Valor en Inventario', value: `$${metrics.totalInventoryValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: DollarSign, iconBg: 'bg-green-600', iconColor: 'text-white' },
+    { label: 'Presupuesto Total', value: `$${metrics.totalBudget.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: Wallet, iconBg: 'bg-primary', iconColor: 'text-white' },
+    { label: 'Requisas (Mes)', value: metrics.totalRequisitionsMTD.toString(), icon: ClipboardList, iconBg: 'bg-purple-600', iconColor: 'text-white' },
+    { label: 'Gasto del Mes', value: `$${metrics.monthlyCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: Activity, iconBg: 'bg-sky-500', iconColor: 'text-white' },
   ];
 
   return (
@@ -315,7 +461,7 @@ export default function DashboardPage() {
             {stats.map((stat, idx) => {
               const Icon = stat.icon;
               return (
-                <div key={idx} className={`bg-white border border-gray-100 border-l-4 ${stat.accent} p-5 shadow-sm hover:shadow-md transition-all duration-300 group`}>
+                <div key={idx} className={`bg-white border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-300 group`}>
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{stat.label}</p>
@@ -436,12 +582,10 @@ export default function DashboardPage() {
           {/* ADVANCED CHARTS SECTION */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
 
-            {/* Table: Top 15 Products */}
+            {/* Chart: Consumption by Area — ancho completo, contiene los botones de período */}
             <div className="bg-white border border-gray-100 shadow-sm col-span-1 lg:col-span-2">
               <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
-                <h2 className="text-xs font-bold text-white uppercase tracking-widest">
-                  Top 15 Productos por Consumo USD
-                </h2>
+                <h2 className="text-xs font-bold text-white uppercase tracking-widest">Consumo por Áreas</h2>
                 <div className="flex gap-1">
                   {(['1m', '3m', '6m', '12m'] as ProductPeriod[]).map((p) => {
                     const labels: Record<ProductPeriod, string> = { '1m': 'Mes actual', '3m': '3 meses', '6m': '6 meses', '12m': '12 meses' };
@@ -457,45 +601,40 @@ export default function DashboardPage() {
                   })}
                 </div>
               </div>
-              <div className="w-full overflow-x-auto p-6">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      <th className="py-2 px-3 text-xs font-bold text-primary/70 uppercase tracking-widest w-12">#</th>
-                      <th className="py-2 px-3 text-xs font-bold text-primary/70 uppercase tracking-widest">Código</th>
-                      <th className="py-2 px-3 text-xs font-bold text-primary/70 uppercase tracking-widest">Producto</th>
-                      <th className="py-2 px-3 text-xs font-bold text-primary/70 uppercase tracking-widest text-right">Consumo Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {productChartData.length > 0 ? (
-                      productChartData.map((prod, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                          <td className="py-2.5 px-3 text-sm font-mono text-gray-400">{idx + 1}</td>
-                          <td className="py-2.5 px-3 text-xs font-mono text-gray-500">{prod.code}</td>
-                          <td className="py-2.5 px-3 text-sm font-semibold text-primary">{prod.name}</td>
-                          <td className="py-2.5 px-3 text-sm font-bold text-green-700 text-right">${prod.cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={4} className="py-8 text-center text-gray-400 text-sm">No hay datos históricos suficientes.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              <div className="p-6">
+                <div className="h-[350px] w-full">
+                  {areaChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={areaChartData} margin={{ top: 30, right: 30, left: 20, bottom: 80 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} angle={-45} textAnchor="end" interval={0} />
+                        <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} />
+                        <Tooltip
+                          formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Consumo']}
+                          contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb', fontSize: '11px', color: '#00262b' }}
+                          cursor={{ fill: '#f9fafb' }}
+                        />
+                        <Bar dataKey="consumido" name="Consumo" fill="#0b363b" radius={[4, 4, 0, 0]}>
+                          <LabelList dataKey="consumido" position="top" formatter={(val: unknown) => Number(val) > 0 ? `$${Number(val).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : ''} style={{ fontSize: 11, fill: '#0b363b', fontWeight: 600 }} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-xs text-gray-400">No hay consumo registrado por áreas en el período seleccionado.</div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Chart: Consumption by Category (Current Month) */}
+            {/* Chart: Consumption by Category */}
             <div className="bg-white border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
-                <h2 className="text-xs font-bold text-white uppercase tracking-widest">Consumo por Categoría (Mes Actual)</h2>
+              <div className="flex items-center px-6 py-3 bg-primary border-b-2 border-white/20">
+                <h2 className="text-xs font-bold text-white uppercase tracking-widest">Consumo por Categoría</h2>
               </div>
               <div className="p-6">
                 <div className="h-[400px] w-full">
                   {categoryChartData.length > 0 ? (() => {
-                    const CAT_COLORS = ['#001d3d', '#1e40af', '#2563eb', '#0891b2', '#0d9488', '#059669', '#d97706', '#dc2626', '#7c3aed', '#db2777', '#65a30d', '#ea580c'];
+                    const CAT_COLORS = ['#0b363b', '#1e40af', '#2563eb', '#0891b2', '#0d9488', '#059669', '#d97706', '#dc2626', '#7c3aed', '#db2777', '#65a30d', '#ea580c'];
                     const total = categoryChartData.reduce((sum, d) => sum + d.value, 0);
                     const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: {
                       cx?: number; cy?: number; midAngle?: number; innerRadius?: number; outerRadius?: number; percent?: number;
@@ -537,20 +676,20 @@ export default function DashboardPage() {
                               </Pie>
                               <Tooltip
                                 formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total Consumido']}
-                                contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb', fontSize: '12px' }}
+                                contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb', fontSize: '11px', color: '#00262b' }}
                               />
                             </PieChart>
                           </ResponsiveContainer>
                         </div>
-                        <div className="flex flex-col justify-center gap-1.5 min-w-[220px] max-w-[240px] overflow-y-auto pr-1">
+                        <div className="flex flex-col justify-center gap-1.5 min-w-[200px] max-w-[220px] overflow-y-auto pr-1 custom-scrollbar">
                           {categoryChartData.map((entry, index) => {
                             const pct = total > 0 ? (entry.value / total) * 100 : 0;
                             return (
                               <div key={entry.name} className="flex items-center gap-2 text-xs">
-                                <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: CAT_COLORS[index % CAT_COLORS.length] }} />
-                                <span className="flex-1 truncate text-gray-700 font-medium">{entry.name}</span>
-                                <span className="text-gray-500 whitespace-nowrap">{pct.toFixed(1)}%</span>
-                                <span className="text-gray-900 font-semibold whitespace-nowrap">${entry.value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                                <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: CAT_COLORS[index % CAT_COLORS.length] }} />
+                                <span className="flex-1 truncate text-primary font-medium">{entry.name}</span>
+                                <span className="text-gray-400 whitespace-nowrap">{pct.toFixed(1)}%</span>
+                                <span className="text-primary font-semibold whitespace-nowrap">${entry.value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
                               </div>
                             );
                           })}
@@ -558,39 +697,44 @@ export default function DashboardPage() {
                       </div>
                     );
                   })() : (
-                    <div className="flex items-center justify-center h-full text-gray-400 text-sm">No hay datos de consumo para el mes actual.</div>
+                    <div className="flex items-center justify-center h-full text-xs text-gray-400">No hay datos de consumo para el mes actual.</div>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Chart: Consumption by Area (Current Month) */}
+            {/* Table: Top 15 Products — media columna */}
             <div className="bg-white border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
-                <h2 className="text-xs font-bold text-white uppercase tracking-widest">Consumo por Áreas (Mes Actual)</h2>
+              <div className="flex items-center px-6 py-3 bg-primary border-b-2 border-white/20">
+                <h2 className="text-xs font-bold text-white uppercase tracking-widest">Top 15 Productos por Consumo USD</h2>
               </div>
-              <div className="p-6">
-                <div className="h-[350px] w-full">
-                  {budgetChartData.filter(d => d.consumido > 0).length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={budgetChartData.filter(d => d.consumido > 0).sort((a, b) => b.consumido - a.consumido)} margin={{ top: 30, right: 30, left: 20, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} />
-                        <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
-                        <Tooltip
-                          formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Consumo']}
-                          contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb' }}
-                          cursor={{ fill: '#f9fafb' }}
-                        />
-                        <Bar dataKey="consumido" name="Consumo MTD" fill="#003566" radius={[4, 4, 0, 0]}>
-                          <LabelList dataKey="consumido" position="top" formatter={(val: unknown) => Number(val) > 0 ? `$${Number(val).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : ''} style={{ fontSize: 10, fill: '#003566', fontWeight: 600 }} />
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-gray-400 text-sm">No hay consumo registrado por áreas en el mes actual.</div>
-                  )}
-                </div>
+              <div className="overflow-y-auto max-h-[400px] custom-scrollbar">
+                <table className="w-full text-left border-collapse">
+                  <thead className="sticky top-0">
+                    <tr className="bg-gray-50">
+                      <th className="py-2 px-3 text-[10px] font-bold text-primary/70 uppercase tracking-widest w-10">#</th>
+                      <th className="py-2 px-3 text-[10px] font-bold text-primary/70 uppercase tracking-widest">Código</th>
+                      <th className="py-2 px-3 text-[10px] font-bold text-primary/70 uppercase tracking-widest">Producto</th>
+                      <th className="py-2 px-3 text-[10px] font-bold text-primary/70 uppercase tracking-widest text-right">Consumo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {productChartData.length > 0 ? (
+                      productChartData.map((prod, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                          <td className="py-2 px-3 text-xs font-mono text-gray-400">{idx + 1}</td>
+                          <td className="py-2 px-3 text-xs font-mono text-gray-400">{prod.code}</td>
+                          <td className="py-2 px-3 text-xs font-medium text-primary">{prod.name}</td>
+                          <td className="py-2 px-3 text-xs font-semibold text-primary text-right">${prod.cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-xs text-gray-400">No hay datos históricos suficientes.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
 
@@ -606,16 +750,16 @@ export default function DashboardPage() {
                       <LineChart data={timelineChartData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                         <XAxis dataKey="mes" stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} />
-                        <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={12} />
+                        <YAxis tickFormatter={(val) => `$${val}`} stroke="#9ca3af" fontSize={11} tick={{ fill: '#9ca3af' }} />
                         <Tooltip
                           formatter={(value) => [`$${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Total USD']}
-                          contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb' }}
+                          contentStyle={{ borderRadius: '0px', border: '1px solid #e5e7eb', fontSize: '11px', color: '#00262b' }}
                         />
-                        <Line type="monotone" dataKey="consumo" name="Consumo Mensual Global" stroke="#001d3d" strokeWidth={3} dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="consumo" name="Consumo Mensual Global" stroke="#0b363b" strokeWidth={2.5} dot={{ r: 4, fill: '#0b363b', strokeWidth: 0 }} activeDot={{ r: 5, fill: '#437278' }} />
                       </LineChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="flex items-center justify-center h-full text-gray-400 text-sm">No hay datos históricos suficientes.</div>
+                    <div className="flex items-center justify-center h-full text-xs text-gray-400">No hay datos históricos suficientes.</div>
                   )}
                 </div>
               </div>

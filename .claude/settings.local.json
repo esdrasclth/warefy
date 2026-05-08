@@ -18,7 +18,11 @@
       "Bash(find /c/Projects/warefyProjects/warefy/lib -type f -name *.ts -o -name *.tsx)",
       "Bash(cat:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(grep -n \"Ã\\\\|â€\\\\|Â¿\\\\|Â¡\" C:/Projects/warefyProjects/warefy/app/\\\\\\(dashboard\\\\\\)/requisar/[id]/page.tsx)",
+      "Bash(node:*)"
     ]
   }
 }

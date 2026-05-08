@@ -39,9 +39,8 @@ export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
       >
         {/* Logo */}
         <div className="flex h-16 items-center justify-between px-6 border-b border-ash-cloud/40">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2 h-2 rounded-full bg-spring-leaf inline-block" />
-            <span className="text-sm font-semibold tracking-[0.12em] text-midnight-ink uppercase">Warefy</span>
+          <div className="flex items-center">
+            <span className="text-2xl font-bold tracking-[0.12em] text-midnight-ink uppercase">Warefy</span>
           </div>
           <button onClick={() => setIsOpen(false)} className="md:hidden text-stone-whisper hover:text-midnight-ink transition-colors">
             <X size={20} />

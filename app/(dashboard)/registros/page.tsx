@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Download, ChevronLeft, ChevronRight, Calendar, FileSpreadsheet, Search } from 'lucide-react';
+import { Loader2, Download, Calendar, FileSpreadsheet, Search } from 'lucide-react';
+import Pagination from '@/components/ui/Pagination';
 import { supabase } from '@/utils/supabase/client';
 import type { InventoryItem, Requisition, RequisitionItem } from '@/types';
 
@@ -396,63 +397,15 @@ export default function RegistrosPage() {
           )}
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/50">
-            <p className="text-xs text-gray-500">
-              Mostrando{' '}
-              <span className="font-bold text-primary">{page * PAGE_SIZE + 1}</span>
-              {' '}–{' '}
-              <span className="font-bold text-primary">
-                {Math.min((page + 1) * PAGE_SIZE, totalCount)}
-              </span>
-              {' '}de{' '}
-              <span className="font-bold text-primary">{totalCount}</span> registros
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold border border-gray-200 text-gray-600 hover:bg-primary hover:text-white hover:border-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft size={14} /> Anterior
-              </button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                  let pageNum: number;
-                  if (totalPages <= 7) {
-                    pageNum = i;
-                  } else if (page < 4) {
-                    pageNum = i;
-                  } else if (page > totalPages - 5) {
-                    pageNum = totalPages - 7 + i;
-                  } else {
-                    pageNum = page - 3 + i;
-                  }
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setPage(pageNum)}
-                      className={`w-8 h-8 text-xs font-bold border transition-colors ${pageNum === page
-                        ? 'bg-primary text-white border-primary'
-                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                        }`}
-                    >
-                      {pageNum + 1}
-                    </button>
-                  );
-                })}
-              </div>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold border border-gray-200 text-gray-600 hover:bg-primary hover:text-white hover:border-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Siguiente <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          pageSize={PAGE_SIZE}
+          itemLabel="registros"
+          onPageChange={setPage}
+        />
+
       </div>
     </div>
   );
