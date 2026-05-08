@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Package, Wallet, ClipboardList, Activity, Loader2, ArrowRight, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, Wallet, ClipboardList, Activity, ArrowRight, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CardsSkeleton, TableSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
@@ -452,8 +453,22 @@ export default function DashboardPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center p-24">
-          <Loader2 size={32} className="animate-spin text-primary" />
+        <div className="space-y-6">
+          <CardsSkeleton count={5} />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-white border border-gray-100 shadow-sm p-6 space-y-4">
+              <div className="h-3 w-40 bg-gray-100 animate-pulse" />
+              <div className="h-56 bg-gray-100 animate-pulse" />
+            </div>
+            <div className="bg-white border border-gray-100 shadow-sm p-6 space-y-4">
+              <div className="h-3 w-32 bg-gray-100 animate-pulse" />
+              <div className="h-56 bg-gray-100 animate-pulse" />
+            </div>
+          </div>
+          <div className="bg-white border border-gray-100 shadow-sm overflow-hidden">
+            <div className="h-10 bg-gray-100 animate-pulse" />
+            <table className="w-full"><tbody><TableSkeleton rows={6} cols={5} /></tbody></table>
+          </div>
         </div>
       ) : (
         <>

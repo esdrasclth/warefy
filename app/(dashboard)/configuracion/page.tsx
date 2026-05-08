@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Save, Loader2, DollarSign } from 'lucide-react';
+import { Save, DollarSign, Loader2 } from 'lucide-react';
+import { FormSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 
 export default function ConfiguracionPage() {
@@ -64,9 +65,7 @@ export default function ConfiguracionPage() {
         <h2 className="text-sm font-bold text-primary uppercase tracking-widest border-b border-gray-100 pb-4 mb-6">Finanzas y Monedas</h2>
         
         {isLoading ? (
-          <div className="flex items-center justify-center p-12">
-            <Loader2 size={32} className="animate-spin text-primary" />
-          </div>
+          <FormSkeleton fields={3} />
         ) : (
           <div className="space-y-6">
             

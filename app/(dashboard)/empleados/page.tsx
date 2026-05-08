@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { Search, Plus, MapPin, Users, Loader2, Save, X, BookOpen, Edit2, Trash2, Key, Shield, Mail, Lock } from 'lucide-react';
+import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { useToast } from '@/components/ui/Toast';
 import { supabase } from '@/utils/supabase/client';
 import type { Area, Employee } from '@/types';
@@ -234,9 +235,7 @@ export default function EmpleadosPage() {
       {/* Main Content Grid */}
       <div className="relative min-h-[400px]">
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-transparent backdrop-blur-[1px] z-20">
-             <Loader2 size={32} className="animate-spin text-primary" />
-          </div>
+          <div className="absolute inset-0 bg-white/70 z-20" />
         )}
 
         {/* Employees Table Layout */}
@@ -257,7 +256,7 @@ export default function EmpleadosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filteredEmployees.map((emp) => {
+                {isLoading ? <TableSkeleton rows={8} cols={6} /> : filteredEmployees.map((emp) => {
                   const isBanned = emp.user_id ? bannedUsers.has(emp.user_id) : false;
                   const hasAccess = !!emp.user_id;
                   return (

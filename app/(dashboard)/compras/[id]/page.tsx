@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Check, X, Printer, Package, Building2, Calendar, ShoppingCart, MessageSquare, ClipboardList } from 'lucide-react';
+import { ArrowLeft, Check, X, Printer, Package, Building2, Calendar, ShoppingCart, MessageSquare, ClipboardList } from 'lucide-react';
+import { DetailSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useToast } from '@/components/ui/Toast';
@@ -121,8 +122,9 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
   };
 
   if (isLoading) return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <Loader2 size={32} className="animate-spin text-primary" />
+    <div className="max-w-4xl mx-auto space-y-8 animate-pulse">
+      <div className="h-10 w-64 bg-gray-100" />
+      <DetailSkeleton cards={4} tableRows={5} tableCols={5} />
     </div>
   );
 

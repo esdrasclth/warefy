@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ShoppingCart, Loader2, AlertTriangle, Package, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, AlertTriangle, Package, RefreshCw } from 'lucide-react';
+import { GroupedSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 import { useToast } from '@/components/ui/Toast';
 
@@ -184,9 +185,7 @@ export default function SugerenciasCompraPage() {
       )}
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 size={28} className="animate-spin text-primary" />
-        </div>
+        <GroupedSkeleton groups={2} rowsPerGroup={4} />
       ) : groups.length === 0 ? (
         <div className="bg-white border border-gray-100 shadow-sm py-16 text-center">
           <Package size={32} className="text-gray-200 mx-auto mb-3" />

@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Loader2, FileText, Check, X, Printer, Package } from 'lucide-react';
+import { ArrowLeft, FileText, Check, X, Printer, Package } from 'lucide-react';
+import { DetailSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useToast } from '@/components/ui/Toast';
@@ -101,8 +102,9 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="animate-spin text-primary" size={32} />
+      <div className="max-w-4xl mx-auto space-y-8">
+        <div className="h-10 w-56 bg-gray-100 animate-pulse" />
+        <DetailSkeleton cards={3} tableRows={6} tableCols={5} />
       </div>
     );
   }

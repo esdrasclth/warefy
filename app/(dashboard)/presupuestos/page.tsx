@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { DollarSign, Package, Save, Loader2, AlertCircle, Search } from 'lucide-react';
+import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { useToast } from '@/components/ui/Toast';
 import { supabase } from '@/utils/supabase/client';
 
@@ -98,8 +99,13 @@ export default function PresupuestosPage() {
       </div>
 
       {isLoading && (
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <Loader2 size={32} className="animate-spin text-primary" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {[0, 1].map(i => (
+            <div key={i} className="bg-white border border-gray-100 shadow-sm overflow-hidden">
+              <div className="h-16 bg-gray-100 animate-pulse" />
+              <table className="w-full"><tbody><TableSkeleton rows={5} cols={4} /></tbody></table>
+            </div>
+          ))}
         </div>
       )}
 

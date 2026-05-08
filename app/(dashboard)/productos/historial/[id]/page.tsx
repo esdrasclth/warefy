@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Building, Calendar, Loader2, Package, User, Eye } from 'lucide-react';
+import { ArrowLeft, Building, Calendar, Package, User, Eye } from 'lucide-react';
+import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 
 interface HistoryRecord {
@@ -131,8 +132,8 @@ export default function ProductHistoryPage() {
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 size={28} className="animate-spin text-primary" />
+          <div className="overflow-x-auto">
+            <table className="w-full"><tbody><TableSkeleton rows={8} cols={7} /></tbody></table>
           </div>
         ) : history.length === 0 ? (
           <div className="py-16 text-center text-gray-400 text-sm">
