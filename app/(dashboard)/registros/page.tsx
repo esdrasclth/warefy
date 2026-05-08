@@ -188,18 +188,15 @@ export default function RegistrosPage() {
       const { data, error } = await supabase
         .from('requisition_items')
         .select(`
-          id,
           quantity,
           delivered_quantity,
           unit_cost,
-          created_at,
           inventory_items (
             code,
             name,
             categories ( name )
           ),
-          requisitions (
-            id,
+          requisitions!inner (
             consecutive,
             comments,
             created_at,
@@ -209,48 +206,44 @@ export default function RegistrosPage() {
             status
           )
         `)
-        .gte('created_at', `${dateFrom}T00:00:00Z`)
-        .lte('created_at', `${dateTo}T23:59:59Z`)
-        .order('created_at', { ascending: false });
+        .neq('requisitions.status', 'CANCELADA')
+        .gte('requisitions.created_at', `${dateFrom}T00:00:00Z`)
+        .lte('requisitions.created_at', `${dateTo}T23:59:59Z`)
+        .order('requisitions(created_at)', { ascending: false });
 
       if (error) { alert('Error al exportar: ' + error.message); return; }
 
-      const exportRows = (data || [])
-        .filter((item: any) => item.requisitions && item.requisitions.status !== 'CANCELADA')
-        .map((item: any) => {
-          const req = item.requisitions as any;
-          const inv = item.inventory_items as any;
-          const cat = inv?.categories as any;
-          const precioUnit = Number(item.unit_cost) || 0;
-          const cantEntregada = Number(item.delivered_quantity ?? item.quantity) || 0;
-          return {
-            'Fecha': req?.created_at ? new Date(req.created_at).toLocaleDateString('es-HN') : '—',
-            'Número de Requisa': req?.consecutive ? `REQ-${String(req.consecutive).padStart(6, '0')}` : '—',
-            'Estado': req?.status || '—',
-            'Código Producto': inv?.code || '—',
-            'Descripción Producto': inv?.name || '—',
-            'Categoría': cat?.name || 'Sin Categoría',
-            'Cantidad Solicitada': Number(item.quantity) || 0,
-            'Cantidad Entregada': cantEntregada,
-            'Código Solicitante': req?.requester_code || '—',
-            'Nombre Solicitante': req?.requester_name || '—',
-            'Área': req?.area_name || '—',
-            'Precio Unitario (USD)': precioUnit,
-            'Total (USD)': cantEntregada * precioUnit,
-            'Comentarios': req?.comments || '—',
-          };
-        });
+      const exportRows = (data || []).map((item: any) => {
+        const req = item.requisitions as any;
+        const inv = item.inventory_items as any;
+        const cat = inv?.categories as any;
+        const precioUnit = Number(item.unit_cost) || 0;
+        const cantEntregada = Number(item.delivered_quantity ?? item.quantity) || 0;
+        return {
+          'Fecha': req?.created_at ? new Date(req.created_at).toLocaleDateString('es-HN') : '—',
+          'Número de Requisa': req?.consecutive ? `REQ-${String(req.consecutive).padStart(6, '0')}` : '—',
+          'Estado': req?.status || '—',
+          'Código Producto': inv?.code || '—',
+          'Descripción Producto': inv?.name || '—',
+          'Categoría': cat?.name || 'Sin Categoría',
+          'Cantidad Solicitada': Number(item.quantity) || 0,
+          'Cantidad Entregada': cantEntregada,
+          'Código Solicitante': req?.requester_code || '—',
+          'Nombre Solicitante': req?.requester_name || '—',
+          'Área': req?.area_name || '—',
+          'Precio Unitario (USD)': precioUnit,
+          'Total (USD)': cantEntregada * precioUnit,
+          'Comentarios': req?.comments || '—',
+        };
+      });
 
       const XLSX = await import('xlsx');
       const ws = XLSX.utils.json_to_sheet(exportRows);
-
-      // Column widths
       ws['!cols'] = [
         { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 16 }, { wch: 40 }, { wch: 20 },
         { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 28 }, { wch: 22 },
         { wch: 20 }, { wch: 16 }, { wch: 40 },
       ];
-
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Registros');
       XLSX.writeFile(wb, `registros_${dateFrom}_${dateTo}.xlsx`);

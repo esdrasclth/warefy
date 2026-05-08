@@ -540,7 +540,7 @@ export default function DashboardPage() {
             <div className="bg-white border border-gray-100 shadow-sm flex flex-col h-[400px]">
               <div className="flex items-center justify-between px-6 py-3 bg-red-700 border-b-2 border-red-400">
                 <h2 className="text-xs font-bold text-white uppercase tracking-widest">Alertas de Stock ({stockAlerts.length})</h2>
-                <Link href="/almacen" className="text-xs text-red-200 hover:text-white transition-colors flex items-center gap-1 font-bold">
+                <Link href="/productos" className="text-xs text-red-200 hover:text-white transition-colors flex items-center gap-1 font-bold">
                   Ir al Almacén <ArrowRight size={12} />
                 </Link>
               </div>

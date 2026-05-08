@@ -61,8 +61,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         // Rutas permitidas por rol (whitelist)
         const ROLE_WHITELIST: Record<string, string[]> = {
-          ADMIN: ['/dashboard', '/almacen', '/requisar', '/compras', '/empleados', '/presupuestos', '/configuracion', '/registros'],
-          ALMACEN: ['/dashboard', '/almacen', '/requisar', '/compras', '/registros'],
+          ADMIN: ['/dashboard', '/productos', '/requisar', '/compras', '/empleados', '/presupuestos', '/configuracion', '/registros'],
+          ALMACEN: ['/dashboard', '/productos', '/requisar', '/compras', '/registros'],
           USER: ['/requisar'],
         };
 

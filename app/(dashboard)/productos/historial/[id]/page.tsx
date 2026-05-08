@@ -92,9 +92,9 @@ export default function ProductHistoryPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 text-gray-500 text-xs uppercase tracking-widest font-bold">
-            <Link href="/almacen" className="flex items-center gap-2 hover:text-primary transition-colors">
+            <Link href="/productos" className="flex items-center gap-2 hover:text-primary transition-colors">
               <ArrowLeft size={14} />
-              Volver a Inventario
+              Volver a Productos
             </Link>
           </div>
           <h1 className="text-3xl font-light text-primary tracking-tight mt-2">Historial de Requisiciones</h1>

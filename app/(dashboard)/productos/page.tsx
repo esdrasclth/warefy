@@ -196,7 +196,7 @@ export default function AlmacenPage() {
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-light text-primary tracking-tight">Inventario</h1>
+          <h1 className="text-3xl font-light text-primary tracking-tight">Productos</h1>
           <p className="text-gray-500 mt-2 text-sm">Catálogo de artículos y control de existencias.</p>
         </div>
         <div className="flex gap-3">
@@ -322,7 +322,7 @@ export default function AlmacenPage() {
                       <td className="py-2 px-3 text-center sticky right-0 bg-white group-hover:bg-blue-50/20 transition-colors border-l border-gray-100 shadow-[ -5px_0_10px_-5px_rgba(0,0,0,0.05) ] z-10">
                         <div className="flex items-center justify-center gap-2">
                           <Link
-                            href={`/almacen/historial/${item.id}`}
+                            href={`/productos/historial/${item.id}`}
                             className="text-gray-400 hover:text-blue-500 transition-colors p-1"
                             title="Ver Historial"
                           >

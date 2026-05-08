@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Printer, Trash2, Eye, Loader2, Check, X, TrendingUp, ClipboardList, Wallet, Activity, Calendar, FileSpreadsheet, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Search, Printer, Trash2, Eye, Loader2, Check, X, TrendingUp, ClipboardList, Wallet, Activity, ChevronDown, ChevronRight } from 'lucide-react';
 import Pagination from '@/components/ui/Pagination';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
@@ -30,14 +30,6 @@ export default function RequisarPage() {
   const pageRef = useRef(0);
   useEffect(() => { pageRef.current = page; }, [page]);
 
-  const today = new Date();
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-    .toISOString().split('T')[0];
-  const todayStr = today.toISOString().split('T')[0];
-
-  const [dateFrom, setDateFrom] = useState(firstOfMonth);
-  const [dateTo, setDateTo] = useState(todayStr);
-  const [isExporting, setIsExporting] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const toggleRow = (id: string) => setExpandedRows(prev => {
@@ -252,95 +244,6 @@ export default function RequisarPage() {
     }
   };
 
-  const handleExportExcel = async () => {
-    if (!dateFrom || !dateTo) return alert('Selecciona un rango de fechas válido.');
-    setIsExporting(true);
-
-    try {
-      const isAdmin = userProfile?.role === 'ADMIN';
-      const areaId = userProfile?.employees?.area_id;
-
-      let query = supabase
-        .from('requisition_items')
-        .select(`
-          id,
-          quantity,
-          delivered_quantity,
-          unit_cost,
-          created_at,
-          inventory_items (
-            code,
-            name,
-            categories ( name )
-          ),
-          requisitions (
-            id,
-            consecutive,
-            comments,
-            created_at,
-            requester_code,
-            requester_name,
-            area_name,
-            area_id,
-            status
-          )
-        `)
-        .gte('created_at', `${dateFrom}T00:00:00Z`)
-        .lte('created_at', `${dateTo}T23:59:59Z`)
-        .order('created_at', { ascending: false });
-
-      const { data, error } = await query;
-      if (error) { alert('Error al exportar: ' + error.message); return; }
-
-      const exportRows = (data || [])
-        .filter((item: any) => {
-          const req = item.requisitions as any;
-          if (!req || req.status === 'CANCELADA') return false;
-          if (!isAdmin && areaId && req.area_id !== areaId) return false;
-          return true;
-        })
-        .map((item: any) => {
-          const req = item.requisitions as any;
-          const inv = item.inventory_items as any;
-          const cat = inv?.categories as any;
-          const precioUnit = Number(item.unit_cost) || 0;
-          const cantEntregada = Number(item.delivered_quantity ?? item.quantity) || 0;
-          return {
-            'Fecha': req?.created_at ? new Date(req.created_at).toLocaleDateString('es-HN') : '—',
-            'Número de Requisa': req?.consecutive ? `REQ-${String(req.consecutive).padStart(6, '0')}` : '—',
-            'Estado': req?.status || '—',
-            'Área': req?.area_name || '—',
-            'Código Producto': inv?.code || '—',
-            'Descripción Producto': inv?.name || '—',
-            'Categoría': cat?.name || 'Sin Categoría',
-            'Cantidad Solicitada': Number(item.quantity) || 0,
-            'Cantidad Entregada': cantEntregada,
-            'Código Solicitante': req?.requester_code || '—',
-            'Nombre Solicitante': req?.requester_name || '—',
-            'Precio Unitario (USD)': precioUnit,
-            'Total (USD)': cantEntregada * precioUnit,
-            'Comentarios': req?.comments || '—',
-          };
-        });
-
-      const XLSX = await import('xlsx');
-      const ws = XLSX.utils.json_to_sheet(exportRows);
-      ws['!cols'] = [
-        { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 22 }, { wch: 16 },
-        { wch: 40 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
-        { wch: 28 }, { wch: 20 }, { wch: 16 }, { wch: 40 },
-      ];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Requisas');
-      XLSX.writeFile(wb, `requisas_${dateFrom}_${dateTo}.xlsx`);
-
-    } catch (e: any) {
-      alert('Error inesperado: ' + e.message);
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   return (
@@ -351,39 +254,13 @@ export default function RequisarPage() {
           <h1 className="text-3xl font-light text-primary tracking-tight">Requisas</h1>
           <p className="text-gray-500 mt-2 text-sm">Creación y seguimiento de solicitudes de material.</p>
         </div>
-        <div className="flex flex-col sm:flex-row items-end gap-3">
-          <div className="flex items-center gap-2 bg-white border border-gray-200 px-3 h-10 shadow-sm">
-            <Calendar size={14} className="text-gray-400 shrink-0" />
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="text-sm text-primary bg-transparent focus:outline-none h-full"
-            />
-            <span className="text-gray-300 text-sm">—</span>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="text-sm text-primary bg-transparent focus:outline-none h-full"
-            />
-          </div>
-          <button
-            onClick={handleExportExcel}
-            disabled={isExporting}
-            className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-4 h-10 text-sm font-bold tracking-wide transition-colors shadow-sm disabled:opacity-60"
-          >
-            {isExporting ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
-            {isExporting ? 'Exportando…' : 'Descargar Excel'}
-          </button>
-          <Link
-            href="/requisar/nueva"
-            className="flex items-center gap-2 bg-primary text-background px-5 h-10 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"
-          >
-            <Plus size={18} strokeWidth={2.5} />
-            Nueva Requisa
-          </Link>
-        </div>
+        <Link
+          href="/requisar/nueva"
+          className="flex items-center gap-2 bg-primary text-background px-5 h-10 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"
+        >
+          <Plus size={18} strokeWidth={2.5} />
+          Nueva Requisa
+        </Link>
       </div>
 
       {/* Métricas del Área */}

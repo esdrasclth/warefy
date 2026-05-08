@@ -14,7 +14,7 @@ export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
 
   const allNavItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'ALMACEN'] },
-    { name: 'Almacén', href: '/almacen', icon: Package, roles: ['ADMIN', 'ALMACEN'] },
+    { name: 'Productos', href: '/productos', icon: Package, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Compras', href: '/compras', icon: ShoppingCart, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Requisar', href: '/requisar', icon: ClipboardList, roles: ['ADMIN', 'ALMACEN', 'USER'] },
     { name: 'Registros', href: '/registros', icon: BookOpen, roles: ['ADMIN', 'ALMACEN'] },
