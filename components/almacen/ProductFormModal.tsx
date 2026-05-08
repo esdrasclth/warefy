@@ -64,7 +64,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
       supabase.from('categories').select('*').order('name'),
       supabase.from('units').select('*').order('name'),
       supabase.from('global_settings').select('*').eq('id', 1).single(),
-      supabase.from('suppliers').select('id, name').eq('status', 'ACTIVE').order('name'),
+      supabase.from('suppliers').select('id, name').order('name'),
     ]);
 
     if (catsRes.data) setCategories(catsRes.data);
