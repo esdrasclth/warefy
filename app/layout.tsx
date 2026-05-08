@@ -9,8 +9,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "ERP Warefy",
-  description: "Minimalist modern ERP module for Warehouse",
+  title: "Warefy | Gestión de Almacén",
+  description: "Sistema de gestión de inventario, requisiciones y órdenes de compra.",
 };
 
 export default function RootLayout({
