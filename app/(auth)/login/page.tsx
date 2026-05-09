@@ -15,17 +15,10 @@ function LoginPageContent() {
   const searchParams = useSearchParams();
   const errorParam = searchParams.get('error');
 
-  // Mensaje de error personalizado según query param
   const getErrorMessage = () => {
-    if (errorParam === 'no_profile') {
-      return 'Tu cuenta no tiene permisos asignados. Contacta al administrador.';
-    }
-    if (errorParam === 'invalid_role') {
-      return 'Tu rol no es válido. Contacta al administrador.';
-    }
-    if (errorParam === 'auth_error') {
-      return 'Error de autenticación. Intenta de nuevo o contacta a soporte.';
-    }
+    if (errorParam === 'no_profile') return 'Tu cuenta no tiene permisos asignados. Contacta al administrador.';
+    if (errorParam === 'invalid_role') return 'Tu rol no es válido. Contacta al administrador.';
+    if (errorParam === 'auth_error') return 'Error de autenticación. Intenta de nuevo o contacta a soporte.';
     return errorMsg;
   };
 
@@ -33,16 +26,9 @@ function LoginPageContent() {
     e.preventDefault();
     setIsLoading(true);
     setErrorMsg('');
-
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-
-      // Successfully logged in
       router.replace('/dashboard');
     } catch (error: any) {
       setErrorMsg(error.message || 'Error al iniciar sesión. Verifica tus credenciales.');
@@ -52,109 +38,213 @@ function LoginPageContent() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background text-primary">
-      {/* Left Axis: Abstract Premium Image */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-primary-dark">
+    <div className="flex min-h-screen" style={{ fontFamily: "'Inter', sans-serif" }}>
+
+      {/* ── Panel izquierdo — marca ── */}
+      <div
+        className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-16 overflow-hidden"
+        style={{ background: '#00262b' }}
+      >
+        {/* Background image */}
         <Image
           src="/login-bg.webp"
-          alt="Warehouse Abstract Concept"
+          alt=""
           fill
-          className="object-cover opacity-80 mix-blend-screen animate-in fade-in duration-1000"
+          className="object-cover opacity-60"
           priority
           quality={75}
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-primary-dark/80 to-transparent" />
+        {/* Overlay oscuro para mantener legibilidad */}
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(0,38,43,0.55) 0%, rgba(11,54,59,0.45) 100%)' }} />
 
-        <div className="absolute bottom-16 left-16 z-10 max-w-lg">
-          <h2 className="text-4xl md:text-5xl font-bold tracking-widest uppercase text-white leading-tight">
-            Gestión Inteligente de <span className="text-yellow-400">Almacenes.</span>
+        {/* Logo */}
+        <div className="relative z-10">
+          <Image
+            src="/logowarefypage.png"
+            alt="Warefy"
+            width={160}
+            height={48}
+            className="object-contain"
+            style={{ filter: 'brightness(0) invert(1)' }}
+            priority
+          />
+        </div>
+
+        {/* Tagline */}
+        <div className="relative z-10">
+          <div
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-6 text-[12px] font-medium tracking-wide"
+            style={{ background: 'rgba(171,255,174,0.1)', border: '1px solid rgba(171,255,174,0.2)', color: '#abffae' }}
+          >
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#abffae', display: 'inline-block' }} />
+            Sistema de Gestión de Almacén — WMS
+          </div>
+          <h2 className="text-4xl font-semibold text-white leading-tight tracking-tight mb-4">
+            Control total de tu<br />
+            <span style={{ color: '#abffae' }}>almacén en tiempo real</span>
           </h2>
-          <p className="mt-4 text-white font-medium tracking-wide text-lg">
-            Control preciso, análisis dinámico y trazabilidad absoluta en cada requisa.
+          <p style={{ color: '#a1c2c6', fontSize: 15, lineHeight: 1.7 }}>
+            Inventario, requisiciones, compras y presupuestos<br />
+            en una sola plataforma.
           </p>
+
+          {/* Mini stats */}
+          <div className="grid grid-cols-3 gap-6 mt-10 pt-10" style={{ borderTop: '1px solid rgba(171,255,174,0.1)' }}>
+            {[
+              { value: '100%', label: 'Control en tiempo real' },
+              { value: 'Multi-rol', label: 'Admin · Almacén · User' },
+              { value: 'Auditoría', label: 'Trazabilidad completa' },
+            ].map((s) => (
+              <div key={s.value}>
+                <p style={{ color: '#abffae', fontWeight: 600, fontSize: 16, marginBottom: 4 }}>{s.value}</p>
+                <p style={{ color: '#4f6466', fontSize: 12 }}>{s.label}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Right Axis: Login Form */}
-      <div className="flex w-full lg:w-1/2 flex-col items-center justify-center p-8 sm:p-12 md:p-16 lg:p-24 bg-white relative">
-        <div className="absolute top-8 right-8 text-xs font-bold tracking-widest uppercase text-gray-400">
-          ERP System v1.0
+      {/* ── Panel derecho — formulario ── */}
+      <div className="flex w-full lg:w-1/2 flex-col items-center justify-center p-8 sm:p-12 relative bg-white">
+
+        {/* Logo mobile (solo en pantallas pequeñas) */}
+        <div className="lg:hidden mb-10">
+          <Image
+            src="/logowarefypage.png"
+            alt="Warefy"
+            width={140}
+            height={42}
+            className="object-contain"
+          />
         </div>
 
-        <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-700">
-          {/* Brand Header */}
-          <div className="mb-12">
-            <h1 className="text-4xl font-bold tracking-widest uppercase text-primary mb-2">
-              Warefy
+        <div className="w-full max-w-sm">
+
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-[26px] font-semibold tracking-tight mb-1" style={{ color: '#00262b' }}>
+              Bienvenido de vuelta
             </h1>
-            <p className="text-gray-500 font-medium">
-              Panel Administrativo de Control. Inicia sesión para continuar.
+            <p style={{ color: '#4f6466', fontSize: 14 }}>
+              Inicia sesión para acceder a tu panel.
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleLogin} className="space-y-5">
 
-            {/* Error Banner */}
-            {(getErrorMessage()) && (
-              <div className="p-4 bg-red-50 text-red-600 border border-red-200 text-sm flex items-start gap-3 animate-in fade-in zoom-in-95 duration-300">
-                <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            {/* Error */}
+            {getErrorMessage() && (
+              <div
+                className="p-3.5 text-sm flex items-start gap-3 rounded-lg"
+                style={{ background: '#feefe8', border: '1px solid rgba(139,57,17,0.2)', color: '#8b3911' }}
+              >
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
                 <span>{getErrorMessage()}</span>
               </div>
             )}
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold tracking-wider uppercase text-gray-500">Correo Electrónico</label>
+            {/* Email */}
+            <div className="space-y-1.5">
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#354d51', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Correo electrónico
+              </label>
               <div className="relative">
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full h-12 pl-12 pr-4 bg-gray-50 border border-gray-200 text-primary placeholder-gray-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all rounded-none"
                   placeholder="admin@warefy.com"
+                  style={{
+                    width: '100%', height: 44, paddingLeft: 44, paddingRight: 16,
+                    background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 8,
+                    fontSize: 14, color: '#00262b', outline: 'none',
+                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#00262b';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(0,38,43,0.08)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 />
-                <Mail className="absolute left-4 top-3.5 text-gray-400" size={20} />
+                <Mail size={16} style={{ position: 'absolute', left: 14, top: 14, color: '#a1c2c6' }} />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold tracking-wider uppercase text-gray-500">Contraseña</label>
+            {/* Password */}
+            <div className="space-y-1.5">
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#354d51', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Contraseña
+              </label>
               <div className="relative">
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full h-12 pl-12 pr-4 bg-gray-50 border border-gray-200 text-primary placeholder-gray-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all rounded-none"
                   placeholder="••••••••"
+                  style={{
+                    width: '100%', height: 44, paddingLeft: 44, paddingRight: 16,
+                    background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 8,
+                    fontSize: 14, color: '#00262b', outline: 'none',
+                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#00262b';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(0,38,43,0.08)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 />
-                <Lock className="absolute left-4 top-3.5 text-gray-400" size={20} />
+                <Lock size={16} style={{ position: 'absolute', left: 14, top: 14, color: '#a1c2c6' }} />
               </div>
             </div>
 
+            {/* Submit */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full h-12 bg-primary text-white font-medium hover:bg-primary-dark transition-colors disabled:opacity-70 disabled:cursor-not-allowed group flex items-center justify-center gap-2 mt-8 rounded-none"
+              className="group flex items-center justify-center gap-2 w-full transition-colors"
+              style={{
+                height: 44, borderRadius: 8, marginTop: 8,
+                background: isLoading ? '#354d51' : '#00262b',
+                color: 'white', fontWeight: 500, fontSize: 14,
+                cursor: isLoading ? 'not-allowed' : 'pointer', border: 'none',
+                opacity: isLoading ? 0.8 : 1,
+              }}
+              onMouseEnter={(e) => { if (!isLoading) (e.currentTarget as HTMLButtonElement).style.background = '#0b363b'; }}
+              onMouseLeave={(e) => { if (!isLoading) (e.currentTarget as HTMLButtonElement).style.background = '#00262b'; }}
             >
               {isLoading ? (
                 <>
-                  <Loader2 size={18} className="animate-spin" />
+                  <Loader2 size={16} className="animate-spin" />
                   <span>Autenticando...</span>
                 </>
               ) : (
                 <>
-                  <span>Ingresar al Sistema</span>
-                  <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                  <span>Ingresar al sistema</span>
+                  <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
                 </>
               )}
             </button>
-
           </form>
 
-          <p className="mt-8 text-center text-xs text-gray-400">
-            En caso de pérdida de accesos, contacte al soporte técnico.
+          <p className="mt-8 text-center" style={{ fontSize: 12, color: '#a1c2c6' }}>
+            ¿Problemas para acceder? Contacta a tu administrador.
           </p>
+        </div>
+
+        {/* Footer del panel */}
+        <div className="absolute bottom-6 text-center" style={{ fontSize: 11, color: '#d1d5db' }}>
+          © 2026 Warefy · Desarrollada por{' '}
+          <a href="http://brandsofts.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#a1c2c6' }}>
+            BrandSofts
+          </a>
         </div>
       </div>
     </div>
@@ -163,7 +253,7 @@ function LoginPageContent() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+    <Suspense fallback={<div className="min-h-screen" style={{ background: '#00262b' }} />}>
       <LoginPageContent />
     </Suspense>
   );
