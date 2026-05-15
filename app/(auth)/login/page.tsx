@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/utils/supabase/client';
 import { Loader2, ArrowRight, Lock, Mail, AlertCircle } from 'lucide-react';
@@ -14,6 +14,12 @@ function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const errorParam = searchParams.get('error');
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) router.replace('/dashboard');
+    });
+  }, []);
 
   const getErrorMessage = () => {
     if (errorParam === 'no_profile') return 'Tu cuenta no tiene permisos asignados. Contacta al administrador.';
