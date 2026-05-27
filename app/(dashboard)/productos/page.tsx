@@ -159,7 +159,8 @@ export default function AlmacenPage() {
       image_url: product.image_url,
       preferred_supplier_id: (product as any).preferred_supplier_id ?? null,
       origin: product.origin ?? 'LOCAL',
-      lead_time_days: product.lead_time_days ?? 7,
+      lead_time_days: product.lead_time_days ?? 5,
+      min_order_qty: product.min_order_qty ?? 1,
     });
     setIsModalOpen(true);
   };

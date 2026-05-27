@@ -26,6 +26,7 @@ export interface ProductData {
   preferred_supplier_id?: string | null;
   origin: 'LOCAL' | 'INTERNACIONAL';
   lead_time_days: number;
+  min_order_qty: number;
 }
 
 interface ProductFormModalProps {
@@ -59,7 +60,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
   const [formData, setFormData] = useState<ProductData>({
     code: '', name: '', category_id: '', unit_id: '',
     quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE',
-    origin: 'LOCAL', lead_time_days: 5,
+    origin: 'LOCAL', lead_time_days: 5, min_order_qty: 1,
   });
 
   // Fetch Categories, Units and Global Settings
@@ -228,6 +229,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
           preferred_supplier_id: formData.preferred_supplier_id ?? null,
           origin: formData.origin,
           lead_time_days: formData.lead_time_days,
+          min_order_qty: formData.min_order_qty,
         },
       });
       error = res.error;
@@ -248,6 +250,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
         preferred_supplier_id: formData.preferred_supplier_id ?? null,
         origin: formData.origin,
         lead_time_days: formData.lead_time_days,
+        min_order_qty: formData.min_order_qty,
       });
       error = res.error;
     }
@@ -500,21 +503,31 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                       ))}
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-primary">
-                      Tiempo de Entrega (días)
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={formData.lead_time_days}
-                      onChange={e => handleChange('lead_time_days', Number(e.target.value))}
-                      className="w-full border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
-                    />
-                    <p className="text-[10px] text-gray-400">
-                      Por defecto: {formData.origin === 'LOCAL' ? '5 días (local).' : '45 días (internacional).'}
-                      {' '}Usado para calcular el stock mínimo sugerido.
-                    </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-primary">Tiempo de Entrega (días)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={formData.lead_time_days}
+                        onChange={e => handleChange('lead_time_days', Number(e.target.value))}
+                        className="w-full border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
+                      />
+                      <p className="text-[10px] text-gray-400">
+                        Por defecto: {formData.origin === 'LOCAL' ? '5 días.' : '45 días.'}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-primary">Pedido Mínimo</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={formData.min_order_qty}
+                        onChange={e => handleChange('min_order_qty', Number(e.target.value))}
+                        className="w-full border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
+                      />
+                      <p className="text-[10px] text-gray-400">Cantidad mínima por orden de compra.</p>
+                    </div>
                   </div>
                 </div>
               </div>
