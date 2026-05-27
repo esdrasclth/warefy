@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, ClipboardList, Wallet, Users, X, Settings, BookOpen, ShoppingCart, TrendingDown, ScrollText } from 'lucide-react';
+import { LayoutDashboard, Package, ClipboardList, Wallet, Users, X, Settings, BookOpen, ShoppingCart, TrendingDown, ScrollText, Truck } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -18,6 +18,7 @@ export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
     { name: 'Productos', href: '/productos', icon: Package, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Compras', href: '/compras', icon: ShoppingCart, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Sugerencias', href: '/compras/sugerencias', icon: TrendingDown, roles: ['ADMIN', 'ALMACEN'] },
+    { name: 'Proveedores', href: '/proveedores', icon: Truck, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Requisar', href: '/requisar', icon: ClipboardList, roles: ['ADMIN', 'ALMACEN', 'USER'] },
     { name: 'Registros', href: '/registros', icon: BookOpen, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Presupuestos', href: '/presupuestos', icon: Wallet, roles: ['ADMIN'] },
