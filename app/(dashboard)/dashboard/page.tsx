@@ -140,45 +140,24 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // Heavy queries: chart data — only on initial load, not on realtime
+  // Heavy queries: chart data via RPC (aggregated server-side) — only on initial load, not on realtime
   const fetchChartData = useCallback(async (month: Date) => {
     const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1).toISOString();
     const twelveMonthsAgo = new Date(month.getFullYear() - 1, month.getMonth(), 1).toISOString();
 
     const [
-      { data: timelineItems },
-      { data: productItems },
-      { data: categoryItems },
-      { data: areaItems },
+      { data: timelineRows },
+      { data: productRows },
+      { data: categoryRows },
+      { data: areaRows },
     ] = await Promise.all([
-      supabase.from('requisition_items')
-        .select('quantity, delivered_quantity, unit_cost, requisitions!inner(created_at, status)')
-        .eq('requisitions.status', 'ENTREGADA')
-        .gte('requisitions.created_at', twelveMonthsAgo)
-        .lt('requisitions.created_at', monthEnd),
-
-      supabase.from('requisition_items')
-        .select('inventory_item_id, quantity, delivered_quantity, unit_cost, inventory_items!inner(name, code), requisitions!inner(created_at, status)')
-        .eq('requisitions.status', 'ENTREGADA')
-        .gte('requisitions.created_at', twelveMonthsAgo)
-        .lt('requisitions.created_at', monthEnd),
-
-      // Categories: now 12 months to support period filtering
-      supabase.from('requisition_items')
-        .select('quantity, delivered_quantity, unit_cost, inventory_items!inner(categories(name)), requisitions!inner(created_at, status)')
-        .eq('requisitions.status', 'ENTREGADA')
-        .gte('requisitions.created_at', twelveMonthsAgo)
-        .lt('requisitions.created_at', monthEnd),
-
-      // Areas: 12 months for period filtering
-      supabase.from('requisition_items')
-        .select('quantity, delivered_quantity, unit_cost, requisitions!inner(area_name, created_at, status)')
-        .eq('requisitions.status', 'ENTREGADA')
-        .gte('requisitions.created_at', twelveMonthsAgo)
-        .lt('requisitions.created_at', monthEnd),
+      supabase.rpc('get_dashboard_timeline', { p_month_end: monthEnd, p_twelve_months_ago: twelveMonthsAgo }),
+      supabase.rpc('get_dashboard_products_12m', { p_month_end: monthEnd, p_twelve_months_ago: twelveMonthsAgo }),
+      supabase.rpc('get_dashboard_categories_12m', { p_month_end: monthEnd, p_twelve_months_ago: twelveMonthsAgo }),
+      supabase.rpc('get_dashboard_areas_12m', { p_month_end: monthEnd, p_twelve_months_ago: twelveMonthsAgo }),
     ]);
 
-    return { timelineItems, productItems, categoryItems, areaItems, month };
+    return { timelineRows: timelineRows ?? [], productRows: productRows ?? [], categoryRows: categoryRows ?? [], areaRows: areaRows ?? [], month };
   }, []);
 
   useEffect(() => {
@@ -191,9 +170,8 @@ export default function DashboardPage() {
           fetchChartData(selectedMonth),
         ]);
 
-        const { timelineItems, productItems, categoryItems, areaItems, month } = chartData;
+        const { timelineRows, productRows, categoryRows, areaRows, month } = chartData;
 
-        const mEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
         const periodCutoffs: Record<string, Date> = {
           '1m': new Date(month.getFullYear(), month.getMonth(), 1),
           '3m': new Date(month.getFullYear(), month.getMonth() - 2, 1),
@@ -201,33 +179,27 @@ export default function DashboardPage() {
           '12m': new Date(month.getFullYear() - 1, month.getMonth(), 1),
         };
 
-        // Timeline map
+        // Timeline map (rows already aggregated by month)
         const timelineMap: Record<string, number> = {};
         for (let i = 11; i >= 0; i--) {
           const d = new Date(month.getFullYear(), month.getMonth() - i, 1);
           timelineMap[d.toLocaleString('es-ES', { month: 'short', year: 'numeric' })] = 0;
         }
-        timelineItems?.forEach(item => {
-          const req = item.requisitions as unknown as { created_at: string };
-          const key = new Date(req.created_at).toLocaleString('es-ES', { month: 'short', year: 'numeric' });
-          if (key in timelineMap) {
-            const qty = (item.delivered_quantity ?? item.quantity) || 0;
-            timelineMap[key] += qty * (item.unit_cost || 0);
-          }
+        timelineRows.forEach((row: { month_start: string; consumo: number }) => {
+          const [yr, mo] = row.month_start.substring(0, 7).split('-').map(Number);
+          const key = new Date(yr, mo - 1, 1).toLocaleString('es-ES', { month: 'short', year: 'numeric' });
+          if (key in timelineMap) timelineMap[key] = Number(row.consumo);
         });
 
-        // Products by period
+        // Products by period (rows aggregated by product+month)
         const buildProdMap = (cutoff: Date) => {
           const map: Record<string, { code: string; name: string; cost: number }> = {};
-          productItems?.forEach(item => {
-            const req = item.requisitions as unknown as { created_at: string };
-            const d = new Date(req.created_at);
-            if (d < cutoff || d >= mEnd) return;
-            const inv = item.inventory_items as unknown as { name: string; code: string };
-            const pid = item.inventory_item_id;
-            const qty = (item.delivered_quantity ?? item.quantity) || 0;
-            if (!map[pid]) map[pid] = { code: inv?.code || 'N/A', name: inv?.name || 'Item', cost: 0 };
-            map[pid].cost += qty * (item.unit_cost || 0);
+          productRows.forEach((row: { inventory_item_id: string; code: string; name: string; month_start: string; cost: number }) => {
+            const rowYM = row.month_start.substring(0, 7);
+            const cutoffYM = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}`;
+            if (rowYM < cutoffYM) return;
+            if (!map[row.inventory_item_id]) map[row.inventory_item_id] = { code: row.code || 'N/A', name: row.name || 'Item', cost: 0 };
+            map[row.inventory_item_id].cost += Number(row.cost);
           });
           return Object.values(map).sort((a, b) => b.cost - a.cost).slice(0, 15);
         };
@@ -235,14 +207,11 @@ export default function DashboardPage() {
         // Categories by period
         const buildCatMap = (cutoff: Date) => {
           const map: Record<string, number> = {};
-          categoryItems?.forEach(item => {
-            const req = item.requisitions as unknown as { created_at: string };
-            const d = new Date(req.created_at);
-            if (d < cutoff || d >= mEnd) return;
-            const inv = item.inventory_items as unknown as { categories?: { name: string } | null };
-            const catName = inv?.categories?.name || 'Sin Categoría';
-            const qty = (item.delivered_quantity ?? item.quantity) || 0;
-            map[catName] = (map[catName] || 0) + qty * (item.unit_cost || 0);
+          categoryRows.forEach((row: { cat_name: string; month_start: string; cost: number }) => {
+            const rowYM = row.month_start.substring(0, 7);
+            const cutoffYM = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}`;
+            if (rowYM < cutoffYM) return;
+            map[row.cat_name] = (map[row.cat_name] || 0) + Number(row.cost);
           });
           return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
         };
@@ -250,13 +219,11 @@ export default function DashboardPage() {
         // Areas by period
         const buildAreaMap = (cutoff: Date) => {
           const map: Record<string, number> = {};
-          areaItems?.forEach(item => {
-            const req = item.requisitions as unknown as { area_name: string; created_at: string };
-            const d = new Date(req.created_at);
-            if (d < cutoff || d >= mEnd) return;
-            const areaName = req.area_name || 'Sin Área';
-            const qty = (item.delivered_quantity ?? item.quantity) || 0;
-            map[areaName] = (map[areaName] || 0) + qty * (item.unit_cost || 0);
+          areaRows.forEach((row: { area_name: string; month_start: string; consumido: number }) => {
+            const rowYM = row.month_start.substring(0, 7);
+            const cutoffYM = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}`;
+            if (rowYM < cutoffYM) return;
+            map[row.area_name] = (map[row.area_name] || 0) + Number(row.consumido);
           });
           return Object.entries(map).map(([name, consumido]) => ({ name, consumido })).sort((a, b) => b.consumido - a.consumido);
         };
@@ -309,9 +276,8 @@ export default function DashboardPage() {
           fetchChartData(selectedMonth),
         ]);
 
-        const { timelineItems, productItems, categoryItems, areaItems, month } = chartData;
+        const { timelineRows, productRows, categoryRows, areaRows, month } = chartData;
 
-        const mEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
         const periodCutoffs: Record<string, Date> = {
           '1m': new Date(month.getFullYear(), month.getMonth(), 1),
           '3m': new Date(month.getFullYear(), month.getMonth() - 2, 1),
@@ -324,53 +290,42 @@ export default function DashboardPage() {
           const d = new Date(month.getFullYear(), month.getMonth() - i, 1);
           timelineMap[d.toLocaleString('es-ES', { month: 'short', year: 'numeric' })] = 0;
         }
-        timelineItems?.forEach(item => {
-          const req = item.requisitions as unknown as { created_at: string };
-          const key = new Date(req.created_at).toLocaleString('es-ES', { month: 'short', year: 'numeric' });
-          if (key in timelineMap) {
-            const qty = (item.delivered_quantity ?? item.quantity) || 0;
-            timelineMap[key] += qty * (item.unit_cost || 0);
-          }
+        timelineRows.forEach((row: { month_start: string; consumo: number }) => {
+          const [yr, mo] = row.month_start.substring(0, 7).split('-').map(Number);
+          const key = new Date(yr, mo - 1, 1).toLocaleString('es-ES', { month: 'short', year: 'numeric' });
+          if (key in timelineMap) timelineMap[key] = Number(row.consumo);
         });
 
         const buildProdMap = (cutoff: Date) => {
           const map: Record<string, { code: string; name: string; cost: number }> = {};
-          productItems?.forEach(item => {
-            const req = item.requisitions as unknown as { created_at: string };
-            const d = new Date(req.created_at);
-            if (d < cutoff || d >= mEnd) return;
-            const inv = item.inventory_items as unknown as { name: string; code: string };
-            const pid = item.inventory_item_id;
-            const qty = (item.delivered_quantity ?? item.quantity) || 0;
-            if (!map[pid]) map[pid] = { code: inv?.code || 'N/A', name: inv?.name || 'Item', cost: 0 };
-            map[pid].cost += qty * (item.unit_cost || 0);
+          productRows.forEach((row: { inventory_item_id: string; code: string; name: string; month_start: string; cost: number }) => {
+            const rowYM = row.month_start.substring(0, 7);
+            const cutoffYM = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}`;
+            if (rowYM < cutoffYM) return;
+            if (!map[row.inventory_item_id]) map[row.inventory_item_id] = { code: row.code || 'N/A', name: row.name || 'Item', cost: 0 };
+            map[row.inventory_item_id].cost += Number(row.cost);
           });
           return Object.values(map).sort((a, b) => b.cost - a.cost).slice(0, 15);
         };
 
         const buildCatMap = (cutoff: Date) => {
           const map: Record<string, number> = {};
-          categoryItems?.forEach(item => {
-            const req = item.requisitions as unknown as { created_at: string };
-            const d = new Date(req.created_at);
-            if (d < cutoff || d >= mEnd) return;
-            const inv = item.inventory_items as unknown as { categories?: { name: string } | null };
-            const catName = inv?.categories?.name || 'Sin Categoría';
-            const qty = (item.delivered_quantity ?? item.quantity) || 0;
-            map[catName] = (map[catName] || 0) + qty * (item.unit_cost || 0);
+          categoryRows.forEach((row: { cat_name: string; month_start: string; cost: number }) => {
+            const rowYM = row.month_start.substring(0, 7);
+            const cutoffYM = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}`;
+            if (rowYM < cutoffYM) return;
+            map[row.cat_name] = (map[row.cat_name] || 0) + Number(row.cost);
           });
           return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
         };
 
         const buildAreaMap = (cutoff: Date) => {
           const map: Record<string, number> = {};
-          areaItems?.forEach(item => {
-            const req = item.requisitions as unknown as { area_name: string; created_at: string };
-            const d = new Date(req.created_at);
-            if (d < cutoff || d >= mEnd) return;
-            const areaName = req.area_name || 'Sin Área';
-            const qty = (item.delivered_quantity ?? item.quantity) || 0;
-            map[areaName] = (map[areaName] || 0) + qty * (item.unit_cost || 0);
+          areaRows.forEach((row: { area_name: string; month_start: string; consumido: number }) => {
+            const rowYM = row.month_start.substring(0, 7);
+            const cutoffYM = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}`;
+            if (rowYM < cutoffYM) return;
+            map[row.area_name] = (map[row.area_name] || 0) + Number(row.consumido);
           });
           return Object.entries(map).map(([name, consumido]) => ({ name, consumido })).sort((a, b) => b.consumido - a.consumido);
         };
