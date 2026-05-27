@@ -27,7 +27,7 @@ export default function AlmacenPage() {
       // 1. Fetch Inventory Items
       const { data: invData, error: invError } = await supabase
         .from('inventory_items')
-        .select('*, categories(name), units(name), preferred_supplier_id, package_unit:units!package_unit_id(name), units_per_package')
+        .select('*, categories(name), units!unit_id(name), preferred_supplier_id, package_unit:units!package_unit_id(name), units_per_package')
         .order('created_at', { ascending: false });
 
       if (invError) throw invError;

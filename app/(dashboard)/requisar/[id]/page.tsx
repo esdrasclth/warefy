@@ -28,7 +28,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
         requisition_items (
           id, quantity, unit_cost, inventory_item_id, delivered_quantity,
           inventory_items (
-            code, name, units(name), units_per_package, package_unit:units!package_unit_id(name)
+            code, name, units!unit_id(name), units_per_package, package_unit:units!package_unit_id(name)
           )
         )
       `)

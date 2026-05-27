@@ -74,7 +74,7 @@ export default function NuevaRequisaView() {
       setIsSearchingItems(true);
       const { data, error } = await supabase
         .from('inventory_items')
-        .select('*, categories(name), units(name), units_per_package, package_unit:units!package_unit_id(name)')
+        .select('*, categories(name), units!unit_id(name), units_per_package, package_unit:units!package_unit_id(name)')
         .eq('status', 'ACTIVE')
         .or(`code.ilike.%${q}%,name.ilike.%${q}%`)
         .order('name')
