@@ -59,15 +59,22 @@ export default function AlmacenPage() {
       });
 
       const consumptionMap: Record<string, number> = {};
+      const consumptionMonthsMap: Record<string, Set<string>> = {};
       reqData?.forEach(item => {
         const qty = (item.delivered_quantity ?? item.quantity) || 0;
+        const req = item.requisitions as unknown as { created_at: string };
+        const monthKey = req.created_at.substring(0, 7);
         consumptionMap[item.inventory_item_id] = (consumptionMap[item.inventory_item_id] || 0) + qty;
+        if (!consumptionMonthsMap[item.inventory_item_id]) consumptionMonthsMap[item.inventory_item_id] = new Set();
+        consumptionMonthsMap[item.inventory_item_id].add(monthKey);
       });
 
       const enrichedItems = invData?.map(item => ({
         ...item,
         pending_oc: ocMap[item.id] || 0,
-        avg_consumption: (consumptionMap[item.id] || 0) / 6
+        avg_consumption: consumptionMonthsMap[item.id]
+          ? (consumptionMap[item.id] || 0) / consumptionMonthsMap[item.id].size
+          : 0
       }));
 
       setItems(enrichedItems || []);
