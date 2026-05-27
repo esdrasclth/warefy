@@ -59,7 +59,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
   const [formData, setFormData] = useState<ProductData>({
     code: '', name: '', category_id: '', unit_id: '',
     quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE',
-    origin: 'LOCAL', lead_time_days: 7,
+    origin: 'LOCAL', lead_time_days: 5,
   });
 
   // Fetch Categories, Units and Global Settings
@@ -99,7 +99,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
         id: crypto.randomUUID(),
         code: '', name: '', category_id: '', unit_id: '',
         quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE',
-        preferred_supplier_id: null, origin: 'LOCAL', lead_time_days: 7,
+        preferred_supplier_id: null, origin: 'LOCAL', lead_time_days: 5,
       });
       setRawValue('');
     }
@@ -482,7 +482,11 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                         <button
                           key={opt}
                           type="button"
-                          onClick={() => handleChange('origin', opt)}
+                          onClick={() => setFormData(prev => ({
+                            ...prev,
+                            origin: opt,
+                            lead_time_days: opt === 'LOCAL' ? 5 : 45,
+                          }))}
                           className={`flex-1 py-2 text-xs font-bold uppercase tracking-widest border transition-colors ${
                             formData.origin === opt
                               ? opt === 'LOCAL'
@@ -508,7 +512,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                       className="w-full border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
                     />
                     <p className="text-[10px] text-gray-400">
-                      {formData.origin === 'LOCAL' ? 'Recomendado: 3–15 días.' : 'Recomendado: 30–90 días.'}
+                      Por defecto: {formData.origin === 'LOCAL' ? '5 días (local).' : '45 días (internacional).'}
                       {' '}Usado para calcular el stock mínimo sugerido.
                     </p>
                   </div>
