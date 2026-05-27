@@ -17,6 +17,8 @@ interface InventoryItem {
   price: number;
   categories?: { name: string };
   units?: { name: string };
+  units_per_package?: number | null;
+  package_unit?: { name: string } | null;
 }
 
 interface RequisitionDraftItem {
@@ -72,7 +74,7 @@ export default function NuevaRequisaView() {
       setIsSearchingItems(true);
       const { data, error } = await supabase
         .from('inventory_items')
-        .select('*, categories(name), units(name)')
+        .select('*, categories(name), units(name), units_per_package, package_unit:units!package_unit_id(name)')
         .eq('status', 'ACTIVE')
         .or(`code.ilike.%${q}%,name.ilike.%${q}%`)
         .order('name')
@@ -513,10 +515,17 @@ export default function NuevaRequisaView() {
                     >
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-primary">{item.name}</span>
-                        <span className="text-[10px] text-gray-400 font-mono tracking-wider">{item.code} • {item.categories?.name}</span>
+                        <span className="text-[10px] text-gray-400 font-mono tracking-wider">
+                          {item.code} • {item.categories?.name}
+                          {item.units_per_package && item.package_unit?.name && (
+                            <span className="ml-1 text-blue-500 font-semibold not-italic">
+                              · 1 {item.package_unit.name} = {item.units_per_package} {item.units?.name || 'und'}
+                            </span>
+                          )}
+                        </span>
                       </div>
                       <div className={`text-xs font-bold ${hasStock ? 'text-primary' : 'text-red-400'}`}>
-                        {availableStock} dispo.
+                        {availableStock} {item.units?.name || 'und'}
                       </div>
                     </button>
                   );
@@ -540,16 +549,23 @@ export default function NuevaRequisaView() {
                      <span className="text-xs font-bold text-gray-300 w-4 text-center shrink-0">{i + 1}</span>
                      <div className="flex-1 min-w-0">
                        <p className="text-sm font-semibold text-primary truncate">{item.inventoryItem.name}</p>
-                       <div className="flex items-center gap-2 mt-0.5">
+                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                          <p className="text-[10px] text-gray-400 font-mono tracking-wider">{item.inventoryItem.code}</p>
                          <span className="text-[10px] text-primary/40 font-bold px-1.5 py-0.5 bg-gray-50 border border-gray-100">
                            INV: {availableStock}
                          </span>
+                         {item.inventoryItem.units_per_package && item.inventoryItem.package_unit?.name && (
+                           <span className="text-[10px] text-blue-500 font-bold px-1.5 py-0.5 bg-blue-50 border border-blue-100">
+                             1 {item.inventoryItem.package_unit.name} = {item.inventoryItem.units_per_package} {item.inventoryItem.units?.name || 'und'}
+                           </span>
+                         )}
                        </div>
                      </div>
                      <div className="flex items-center gap-3">
                        <div className="flex flex-col items-center">
-                         <span className="text-[9px] text-gray-400 uppercase tracking-widest">Cant.</span>
+                         <span className="text-[9px] text-gray-400 uppercase tracking-widest">
+                           Cant. ({item.inventoryItem.units?.name || 'und'})
+                         </span>
                          <input
                            type="number"
                            min="1"
@@ -558,6 +574,18 @@ export default function NuevaRequisaView() {
                            onChange={(e) => handleUpdateQuantity(item.inventoryItem.id, e.target.value)}
                            className="w-16 border border-gray-200 px-2 py-1 text-sm text-center focus:outline-none focus:border-primary font-bold text-primary"
                          />
+                         {item.inventoryItem.units_per_package && item.inventoryItem.package_unit?.name && item.quantity > 0 && (
+                           <span className="text-[9px] text-blue-500 font-semibold mt-0.5">
+                             {(() => {
+                               const full = Math.floor(item.quantity / item.inventoryItem.units_per_package!);
+                               const rem = item.quantity % item.inventoryItem.units_per_package!;
+                               if (full === 0) return `< 1 ${item.inventoryItem.package_unit!.name}`;
+                               return rem === 0
+                                 ? `= ${full} ${item.inventoryItem.package_unit!.name}`
+                                 : `≈ ${full} ${item.inventoryItem.package_unit!.name} +${rem}`;
+                             })()}
+                           </span>
+                         )}
                        </div>
                        <div className="flex flex-col items-end min-w-[80px]">
                          <span className="text-[9px] text-gray-400 uppercase tracking-widest">Subtotal</span>

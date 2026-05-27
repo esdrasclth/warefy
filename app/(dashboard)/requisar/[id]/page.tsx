@@ -28,7 +28,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
         requisition_items (
           id, quantity, unit_cost, inventory_item_id, delivered_quantity,
           inventory_items (
-            code, name, units(name)
+            code, name, units(name), units_per_package, package_unit:units!package_unit_id(name)
           )
         )
       `)
@@ -296,22 +296,51 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
                   <tr key={item.id || idx} className="hover:bg-gray-50/50 transition-colors group">
                     <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs font-mono text-gray-500">{iData?.code || '---'}</td>
                     <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs font-semibold text-primary break-words whitespace-normal leading-tight">{iData?.name || 'Artículo Desconocido'}</td>
-                    <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs text-gray-500 text-center lowercase">{iData?.units?.name || 'und'}</td>
-                    <td className="px-6 print:px-2 py-4 print:py-1 text-base print:text-sm font-bold text-gray-400 text-right">{item.quantity}</td>
+                    <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs text-gray-500 text-center">
+                      <span className="lowercase">{iData?.units?.name || 'und'}</span>
+                      {iData?.units_per_package && iData?.package_unit?.name && (
+                        <span className="block text-[9px] text-blue-400 font-semibold uppercase mt-0.5 print:hidden">
+                          1 {iData.package_unit.name} = {iData.units_per_package}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 print:px-2 py-4 print:py-1 text-base print:text-sm font-bold text-gray-400 text-right">
+                      {item.quantity}
+                      {iData?.units_per_package && iData?.package_unit?.name && (() => {
+                        const full = Math.floor(item.quantity / iData.units_per_package);
+                        const rem = item.quantity % iData.units_per_package;
+                        if (full === 0) return null;
+                        return (
+                          <span className="block text-[9px] text-blue-400 font-semibold print:hidden">
+                            {rem === 0 ? `${full} ${iData.package_unit.name}` : `~${full} ${iData.package_unit.name} +${rem}`}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-6 print:px-2 py-4 print:py-1 text-base print:text-sm font-bold text-primary text-right">
                       {requisition.status === 'PENDIENTE' ? (
                         <>
-                          <input 
-                            type="number" 
-                            min="0" 
-                            max={item.quantity} 
-                            value={effectiveQty} 
+                          <input
+                            type="number"
+                            min="0"
+                            max={item.quantity}
+                            value={effectiveQty}
                             onChange={(e) => {
                               const val = Math.max(0, Math.min(item.quantity, parseInt(e.target.value) || 0));
                               setDeliveredQuantities({...deliveredQuantities, [item.id]: val});
                             }}
                             className="w-20 border border-gray-300 px-2 py-1 text-right focus:outline-none focus:border-primary print:hidden"
                           />
+                          {iData?.units_per_package && iData?.package_unit?.name && effectiveQty > 0 && (() => {
+                            const full = Math.floor(effectiveQty / iData.units_per_package);
+                            const rem = effectiveQty % iData.units_per_package;
+                            if (full === 0) return null;
+                            return (
+                              <span className="block text-[9px] text-blue-400 font-semibold print:hidden">
+                                {rem === 0 ? `${full} ${iData.package_unit.name}` : `~${full} ${iData.package_unit.name} +${rem}`}
+                              </span>
+                            );
+                          })()}
                           <span className="hidden print:inline">{effectiveQty}</span>
                         </>
                       ) : (

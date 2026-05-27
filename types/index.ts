@@ -59,6 +59,9 @@ export interface InventoryItem {
   origin?: 'LOCAL' | 'INTERNACIONAL';
   lead_time_days?: number;
   min_order_qty?: number;
+  package_unit_id?: string | null;
+  units_per_package?: number | null;
+  package_unit?: { name: string } | null;
   created_at?: string;
   updated_at?: string;
   categories?: Category;

@@ -27,6 +27,8 @@ export interface ProductData {
   origin: 'LOCAL' | 'INTERNACIONAL';
   lead_time_days: number;
   min_order_qty: number;
+  package_unit_id?: string | null;
+  units_per_package?: number | null;
 }
 
 interface ProductFormModalProps {
@@ -100,7 +102,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
         id: crypto.randomUUID(),
         code: '', name: '', category_id: '', unit_id: '',
         quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE',
-        preferred_supplier_id: null, origin: 'LOCAL', lead_time_days: 5,
+        preferred_supplier_id: null, origin: 'LOCAL', lead_time_days: 5, min_order_qty: 1, package_unit_id: null, units_per_package: null,
       });
       setRawValue('');
     }
@@ -230,6 +232,8 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
           origin: formData.origin,
           lead_time_days: formData.lead_time_days,
           min_order_qty: formData.min_order_qty,
+          package_unit_id: formData.package_unit_id ?? null,
+          units_per_package: formData.units_per_package ?? null,
         },
       });
       error = res.error;
@@ -251,6 +255,8 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
         origin: formData.origin,
         lead_time_days: formData.lead_time_days,
         min_order_qty: formData.min_order_qty,
+        package_unit_id: formData.package_unit_id ?? null,
+        units_per_package: formData.units_per_package ?? null,
       });
       error = res.error;
     }
@@ -608,6 +614,44 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                       type="number" className="w-full border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors" 
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Presentación / Empaque */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">Presentación de Empaque</h3>
+                <div className="p-4 border border-gray-100 bg-white space-y-3">
+                  <p className="text-[10px] text-gray-400">Opcional. Configura si el artículo se maneja en empaques (cajas, paquetes, etc.) además de su unidad base.</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-primary">Unidad de Empaque</label>
+                      <select
+                        value={formData.package_unit_id ?? ''}
+                        onChange={e => setFormData(prev => ({ ...prev, package_unit_id: e.target.value || null }))}
+                        className="w-full border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
+                      >
+                        <option value="">Sin empaque</option>
+                        {units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-primary">Unidades por Empaque</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={formData.units_per_package ?? ''}
+                        onChange={e => setFormData(prev => ({ ...prev, units_per_package: e.target.value ? Number(e.target.value) : null }))}
+                        placeholder="Ej. 24"
+                        disabled={!formData.package_unit_id}
+                        className="w-full border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors disabled:opacity-40"
+                      />
+                    </div>
+                  </div>
+                  {formData.package_unit_id && formData.units_per_package && (
+                    <div className="bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-700 font-semibold">
+                      1 {units.find(u => u.id === formData.package_unit_id)?.name} = {formData.units_per_package} {units.find(u => u.id === formData.unit_id)?.name || 'unidades'}
+                    </div>
+                  )}
                 </div>
               </div>
 

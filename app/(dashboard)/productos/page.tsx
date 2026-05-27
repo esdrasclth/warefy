@@ -27,7 +27,7 @@ export default function AlmacenPage() {
       // 1. Fetch Inventory Items
       const { data: invData, error: invError } = await supabase
         .from('inventory_items')
-        .select('*, categories(name), units(name), preferred_supplier_id')
+        .select('*, categories(name), units(name), preferred_supplier_id, package_unit:units!package_unit_id(name), units_per_package')
         .order('created_at', { ascending: false });
 
       if (invError) throw invError;
@@ -161,6 +161,8 @@ export default function AlmacenPage() {
       origin: product.origin ?? 'LOCAL',
       lead_time_days: product.lead_time_days ?? 5,
       min_order_qty: product.min_order_qty ?? 1,
+      package_unit_id: (product as any).package_unit_id ?? null,
+      units_per_package: product.units_per_package ?? null,
     });
     setIsModalOpen(true);
   };
@@ -322,7 +324,14 @@ export default function AlmacenPage() {
                       <td className="py-2 px-3 text-xs text-gray-700 font-medium group-hover:text-primary transition-colors truncate">
                         <div className="flex flex-col">
                           <span className="truncate">{item.name}</span>
-                          <span className="text-[9px] text-gray-400 font-normal uppercase">{item.units?.name || 'UND'}</span>
+                          <span className="text-[9px] text-gray-400 font-normal uppercase">
+                            {item.units?.name || 'UND'}
+                            {item.units_per_package && (item as any).package_unit?.name && (
+                              <span className="ml-1 text-blue-400">
+                                · {(item as any).package_unit.name} ×{item.units_per_package}
+                              </span>
+                            )}
+                          </span>
                         </div>
                       </td>
                       <td className="py-2 px-3 text-[10px] text-gray-500 uppercase truncate">{item.categories?.name || 'N/A'}</td>
