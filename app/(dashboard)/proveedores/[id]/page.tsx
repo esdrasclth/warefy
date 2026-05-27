@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ShoppingCart, Package, AlertTriangle, CheckSquare, Square, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Package, AlertTriangle, CheckSquare, Square, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
 import { useToast } from '@/components/ui/Toast';
@@ -26,6 +26,18 @@ interface SupplierProduct {
   orderQty: number;
 }
 
+interface PurchaseOrder {
+  id: string;
+  consecutive: number;
+  status: 'PENDIENTE' | 'RECIBIDA' | 'CANCELADA';
+  total_cost: number;
+  created_at: string;
+  comments?: string | null;
+  manual_requisition_number?: string | null;
+  requisitions?: { consecutive: number } | null;
+  purchase_items: { quantity: number; unit_cost: number; received_quantity?: number | null; inventory_items: { name: string; code: string } }[];
+}
+
 interface Supplier {
   id: string;
   name: string;
@@ -42,13 +54,14 @@ export default function SupplierDetailPage(props: { params: Promise<{ id: string
 
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [products, setProducts] = useState<SupplierProduct[]>([]);
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const fetch = async () => {
       setIsLoading(true);
-      const [{ data: suppData }, { data: prodData }] = await Promise.all([
+      const [{ data: suppData }, { data: prodData }, { data: ocData }] = await Promise.all([
         supabase.from('suppliers').select('*').eq('id', id).single(),
         supabase
           .from('inventory_items')
@@ -56,6 +69,11 @@ export default function SupplierDetailPage(props: { params: Promise<{ id: string
           .eq('preferred_supplier_id', id)
           .eq('status', 'ACTIVE')
           .order('name'),
+        supabase
+          .from('purchases')
+          .select('id, consecutive, status, total_cost, created_at, comments, manual_requisition_number, requisitions(consecutive), purchase_items(quantity, unit_cost, received_quantity, inventory_items(name, code))')
+          .eq('supplier_id', id)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (!suppData) { toast.error('Proveedor no encontrado.'); router.push('/proveedores'); return; }
@@ -76,6 +94,7 @@ export default function SupplierDetailPage(props: { params: Promise<{ id: string
         enriched.filter(p => (p.quantity - (p.committed_quantity || 0)) <= p.min_stock).map(p => p.id)
       );
       setSelected(belowMin);
+      setOrders((ocData || []) as unknown as PurchaseOrder[]);
       setIsLoading(false);
     };
     fetch();
@@ -305,6 +324,98 @@ export default function SupplierDetailPage(props: { params: Promise<{ id: string
           </div>
         )}
       </div>
+      {/* OCs Section */}
+      <div className="bg-white border border-gray-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
+          <h2 className="text-xs font-bold text-white uppercase tracking-widest">
+            Órdenes de Compra ({orders.length})
+          </h2>
+        </div>
+
+        {orders.length === 0 ? (
+          <div className="py-12 flex flex-col items-center text-gray-400 gap-2">
+            <FileText size={32} className="text-gray-200" />
+            <p className="text-sm">No hay órdenes de compra registradas para este proveedor.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="py-2 px-4 text-[10px] font-bold text-primary/70 uppercase tracking-widest">OC #</th>
+                  <th className="py-2 px-4 text-[10px] font-bold text-primary/70 uppercase tracking-widest">Fecha</th>
+                  <th className="py-2 px-4 text-[10px] font-bold text-primary/70 uppercase tracking-widest">Estado</th>
+                  <th className="py-2 px-4 text-[10px] font-bold text-primary/70 uppercase tracking-widest">Artículos</th>
+                  <th className="py-2 px-4 text-[10px] font-bold text-primary/70 uppercase tracking-widest text-right">Total</th>
+                  <th className="py-2 px-4 text-[10px] font-bold text-primary/70 uppercase tracking-widest text-center">Ver</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {orders.map(oc => {
+                  const statusCfg = {
+                    PENDIENTE: { label: 'Pendiente', cls: 'text-blue-600 border-blue-200 bg-blue-50' },
+                    RECIBIDA:  { label: 'Recibida',  cls: 'text-green-600 border-green-200 bg-green-50' },
+                    CANCELADA: { label: 'Cancelada', cls: 'text-red-500 border-red-200 bg-red-50' },
+                  }[oc.status] ?? { label: oc.status, cls: 'text-gray-400 border-gray-200 bg-gray-50' };
+
+                  return (
+                    <tr key={oc.id} className="hover:bg-blue-50/20 transition-colors border-b border-gray-50">
+                      <td className="py-3 px-4">
+                        <p className="text-sm font-bold text-primary font-mono">
+                          OC-{String(oc.consecutive).padStart(5, '0')}
+                        </p>
+                        {oc.manual_requisition_number && (
+                          <p className="text-[10px] text-gray-400 font-mono">Req: {oc.manual_requisition_number}</p>
+                        )}
+                        {oc.requisitions?.consecutive && (
+                          <p className="text-[10px] text-gray-400 font-mono">
+                            REQ-{String(oc.requisitions.consecutive).padStart(6, '0')}
+                          </p>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-xs text-gray-500">
+                        {new Date(oc.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 border ${statusCfg.cls}`}>
+                          {statusCfg.label}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="space-y-0.5">
+                          {oc.purchase_items.slice(0, 3).map((item, i) => (
+                            <p key={i} className="text-[10px] text-gray-500 truncate max-w-[220px]">
+                              <span className="font-mono text-gray-400">{item.inventory_items.code}</span>
+                              {' '}{item.inventory_items.name}
+                              {' '}<span className="font-semibold text-primary">×{item.received_quantity ?? item.quantity}</span>
+                            </p>
+                          ))}
+                          {oc.purchase_items.length > 3 && (
+                            <p className="text-[10px] text-gray-400">+{oc.purchase_items.length - 3} más...</p>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm font-bold text-primary text-right font-mono">
+                        ${Number(oc.total_cost).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <Link
+                          href={`/compras/${oc.id}`}
+                          className="p-1.5 text-gray-400 hover:text-primary transition-colors inline-block"
+                          title="Ver detalle"
+                        >
+                          <FileText size={15} />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
