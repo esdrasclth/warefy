@@ -323,10 +323,9 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
                           <input
                             type="number"
                             min="0"
-                            max={item.quantity}
                             value={effectiveQty}
                             onChange={(e) => {
-                              const val = Math.max(0, Math.min(item.quantity, parseInt(e.target.value) || 0));
+                              const val = Math.max(0, parseInt(e.target.value) || 0);
                               setDeliveredQuantities({...deliveredQuantities, [item.id]: val});
                             }}
                             className="w-20 border border-gray-300 px-2 py-1 text-right focus:outline-none focus:border-primary print:hidden"
