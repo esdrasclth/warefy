@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Edit2, Trash2, X, Save, Loader2, Truck, Package, ShoppingCart, Building2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, Save, Loader2, Truck, Package, ShoppingCart, Building2, Eye } from 'lucide-react';
+import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardsSkeleton } from '@/components/ui/TableSkeleton';
@@ -227,6 +228,9 @@ export default function ProveedoresPage() {
                     </td>
                     <td className="py-3 px-4 sticky right-0 bg-white group-hover:bg-blue-50/20 border-l border-gray-100 transition-colors">
                       <div className="flex items-center justify-center gap-2">
+                        <Link href={`/proveedores/${s.id}`} className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors" title="Ver productos">
+                          <Eye size={15} />
+                        </Link>
                         <button onClick={() => openEdit(s)} className="p-1.5 text-gray-400 hover:text-primary transition-colors" title="Editar">
                           <Edit2 size={15} />
                         </button>
