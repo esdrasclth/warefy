@@ -34,7 +34,7 @@ export default function ConteoPage() {
     setIsLoading(true);
     const { data, error } = await supabase
       .from('inventory_items')
-      .select('id, code, name, quantity, price, categories(name), units(name)')
+      .select('id, code, name, quantity, price, categories(name), units!unit_id(name)')
       .eq('status', 'ACTIVE')
       .order('name');
 

@@ -117,7 +117,7 @@ export default function EditarCompraView({ params }: { params: Promise<{ id: str
       setIsSearchingItems(true);
       const { data } = await supabase
         .from('inventory_items')
-        .select('*, categories(name), units(name)')
+        .select('*, categories(name), units!unit_id(name)')
         .eq('status', 'ACTIVE')
         .or(`code.ilike.%${q}%,name.ilike.%${q}%`)
         .limit(10);

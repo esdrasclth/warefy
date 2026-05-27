@@ -113,7 +113,7 @@ export default function NuevaCompraView() {
       const ids = draft.items.map(i => i.id);
       const { data: invData } = await supabase
         .from('inventory_items')
-        .select('*, categories(name), units(name)')
+        .select('*, categories(name), units!unit_id(name)')
         .in('id', ids);
 
       if (invData) {
@@ -155,7 +155,7 @@ export default function NuevaCompraView() {
       setIsSearchingItems(true);
       const { data } = await supabase
         .from('inventory_items')
-        .select('*, categories(name), units(name)')
+        .select('*, categories(name), units!unit_id(name)')
         .eq('status', 'ACTIVE')
         .or(`code.ilike.%${q}%,name.ilike.%${q}%`)
         .limit(10);

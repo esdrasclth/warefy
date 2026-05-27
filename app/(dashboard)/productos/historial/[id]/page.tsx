@@ -45,7 +45,7 @@ export default function ProductHistoryPage() {
       const [productRes, historyRes] = await Promise.all([
         supabase
           .from('inventory_items')
-          .select('id, code, name, categories(name), units(name)')
+          .select('id, code, name, categories(name), units!unit_id(name)')
           .eq('id', productId)
           .single(),
         supabase

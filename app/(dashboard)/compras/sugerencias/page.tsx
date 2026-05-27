@@ -40,7 +40,7 @@ export default function SugerenciasCompraPage() {
       .from('inventory_items')
       .select(`
         id, code, name, quantity, min_stock, max_stock, price,
-        units ( name ),
+        units!unit_id ( name ),
         preferred_supplier_id,
         suppliers:preferred_supplier_id ( id, name )
       `)
@@ -52,7 +52,7 @@ export default function SugerenciasCompraPage() {
       .from('inventory_items')
       .select(`
         id, code, name, quantity, min_stock, max_stock, price,
-        units ( name ),
+        units!unit_id ( name ),
         preferred_supplier_id,
         suppliers:preferred_supplier_id ( id, name )
       `)

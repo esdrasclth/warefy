@@ -28,7 +28,7 @@ export default function PresupuestosPage() {
     const { data: budgetsData } = await supabase.from('area_budgets').select('area_id, monthly_budget');
     
     // Fetch products and their limits
-    const { data: productsData } = await supabase.from('inventory_items').select('id, code, name, units(name)').order('name');
+    const { data: productsData } = await supabase.from('inventory_items').select('id, code, name, units!unit_id(name)').order('name');
     const { data: limitsData } = await supabase.from('product_limits').select('inventory_item_id, monthly_limit_units');
 
     if (areasData) setAreas(areasData);
