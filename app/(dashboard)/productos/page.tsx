@@ -158,6 +158,8 @@ export default function AlmacenPage() {
       status: product.status,
       image_url: product.image_url,
       preferred_supplier_id: (product as any).preferred_supplier_id ?? null,
+      origin: product.origin ?? 'LOCAL',
+      lead_time_days: product.lead_time_days ?? 7,
     });
     setIsModalOpen(true);
   };
@@ -308,13 +310,26 @@ export default function AlmacenPage() {
 
                   const totalCost = stock * price;
                   const isLowStock = available <= min;
+                  const avgDaily = (item.avg_consumption || 0) / 30;
+                  const leadTime = item.lead_time_days || 7;
+                  const suggestedMin = avgDaily > 0 ? Math.ceil(avgDaily * leadTime) : null;
+                  const suggestedMax = suggestedMin !== null ? Math.ceil(suggestedMin + avgDaily * 30) : null;
 
                   return (
                     <tr key={item.id} className="hover:bg-blue-50/20 transition-colors group border-b border-gray-50">
                       <td className="py-2 px-3 text-[11px] font-mono text-primary truncate">{item.code}</td>
                       <td className="py-2 px-3 text-xs text-gray-700 font-medium group-hover:text-primary transition-colors truncate">
-                        <div className="flex flex-col">
-                          <span className="truncate">{item.name}</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate">{item.name}</span>
+                            <span className={`text-[8px] font-bold uppercase px-1 py-0.5 border flex-shrink-0 ${
+                              item.origin === 'INTERNACIONAL'
+                                ? 'text-blue-600 border-blue-200 bg-blue-50'
+                                : 'text-green-600 border-green-200 bg-green-50'
+                            }`}>
+                              {item.origin === 'INTERNACIONAL' ? 'INT' : 'LOC'}
+                            </span>
+                          </div>
                           <span className="text-[9px] text-gray-400 font-normal uppercase">{item.units?.name || 'UND'}</span>
                         </div>
                       </td>
@@ -337,8 +352,13 @@ export default function AlmacenPage() {
                       <td className="py-2 px-3 text-xs text-right text-purple-600 font-semibold italic">
                         {(item.avg_consumption ?? 0) > 0 ? (item.avg_consumption ?? 0).toFixed(1) : '0.0'}
                       </td>
-                      <td className="py-2 px-3 text-[10px] text-right text-gray-400 font-mono">
-                        {item.min_stock}/{item.max_stock}
+                      <td className="py-2 px-3 text-right">
+                        <span className="text-[10px] text-gray-400 font-mono block">{item.min_stock}/{item.max_stock}</span>
+                        {suggestedMin !== null && (
+                          <span className="text-[9px] text-blue-400 font-mono block">
+                            Sug: {suggestedMin}/{suggestedMax}
+                          </span>
+                        )}
                       </td>
                       <td className={`py-2 px-3 text-xs text-right font-mono ${price === 0 ? 'text-orange-400 font-bold' : 'text-gray-600'}`}>
                         {price === 0 ? '⚠ $0.00' : `$${price.toFixed(2)}`}

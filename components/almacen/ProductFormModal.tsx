@@ -24,6 +24,8 @@ export interface ProductData {
   status: 'ACTIVE' | 'INACTIVE';
   image_url?: string | null;
   preferred_supplier_id?: string | null;
+  origin: 'LOCAL' | 'INTERNACIONAL';
+  lead_time_days: number;
 }
 
 interface ProductFormModalProps {
@@ -56,7 +58,8 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
   // Form State
   const [formData, setFormData] = useState<ProductData>({
     code: '', name: '', category_id: '', unit_id: '',
-    quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE'
+    quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE',
+    origin: 'LOCAL', lead_time_days: 7,
   });
 
   // Fetch Categories, Units and Global Settings
@@ -93,10 +96,10 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
       setRawValue(productToEdit.price > 0 ? String(productToEdit.price) : '');
     } else {
       setFormData({
-        id: crypto.randomUUID(), // pre-generar ID para poder subir imagen antes de guardar
+        id: crypto.randomUUID(),
         code: '', name: '', category_id: '', unit_id: '',
         quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE',
-        preferred_supplier_id: null,
+        preferred_supplier_id: null, origin: 'LOCAL', lead_time_days: 7,
       });
       setRawValue('');
     }
@@ -223,6 +226,8 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
           price: formData.price,
           status: formData.status,
           preferred_supplier_id: formData.preferred_supplier_id ?? null,
+          origin: formData.origin,
+          lead_time_days: formData.lead_time_days,
         },
       });
       error = res.error;
@@ -241,6 +246,8 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
         status: formData.status,
         image_url: formData.image_url ?? null,
         preferred_supplier_id: formData.preferred_supplier_id ?? null,
+        origin: formData.origin,
+        lead_time_days: formData.lead_time_days,
       });
       error = res.error;
     }
@@ -461,6 +468,50 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                     </p>
                   )}
                   <p className="text-[10px] text-gray-400 mt-0.5">Usado para agrupar órdenes de compra automáticas en Sugerencias.</p>
+                </div>
+              </div>
+
+              {/* Origen y Logística */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">Origen y Logística</h3>
+                <div className="p-4 border border-gray-100 bg-white space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-primary">Origen del Artículo</label>
+                    <div className="flex gap-2">
+                      {(['LOCAL', 'INTERNACIONAL'] as const).map(opt => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => handleChange('origin', opt)}
+                          className={`flex-1 py-2 text-xs font-bold uppercase tracking-widest border transition-colors ${
+                            formData.origin === opt
+                              ? opt === 'LOCAL'
+                                ? 'bg-green-600 text-white border-green-600'
+                                : 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400'
+                          }`}
+                        >
+                          {opt === 'LOCAL' ? 'Local' : 'Internacional'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-primary">
+                      Tiempo de Entrega (días)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={formData.lead_time_days}
+                      onChange={e => handleChange('lead_time_days', Number(e.target.value))}
+                      className="w-full border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
+                    />
+                    <p className="text-[10px] text-gray-400">
+                      {formData.origin === 'LOCAL' ? 'Recomendado: 3–15 días.' : 'Recomendado: 30–90 días.'}
+                      {' '}Usado para calcular el stock mínimo sugerido.
+                    </p>
+                  </div>
                 </div>
               </div>
 

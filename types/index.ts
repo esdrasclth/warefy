@@ -56,6 +56,8 @@ export interface InventoryItem {
   category_id?: string;
   unit_id?: string;
   image_url?: string | null;
+  origin?: 'LOCAL' | 'INTERNACIONAL';
+  lead_time_days?: number;
   created_at?: string;
   updated_at?: string;
   categories?: Category;
