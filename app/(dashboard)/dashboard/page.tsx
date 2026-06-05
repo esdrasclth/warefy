@@ -602,7 +602,7 @@ export default function DashboardPage() {
                 <h2 className="text-xs font-bold text-white uppercase tracking-widest">Consumo por Categoría</h2>
               </div>
               <div className="p-6">
-                <div className="h-[400px] w-full">
+                <div className="h-[440px] sm:h-[400px] w-full">
                   {categoryChartData.length > 0 ? (() => {
                     const CAT_COLORS = ['#0b363b', '#1e40af', '#2563eb', '#0891b2', '#0d9488', '#059669', '#d97706', '#dc2626', '#7c3aed', '#db2777', '#65a30d', '#ea580c'];
                     const total = categoryChartData.reduce((sum, d) => sum + d.value, 0);
@@ -624,8 +624,8 @@ export default function DashboardPage() {
                       );
                     };
                     return (
-                      <div className="flex gap-4 h-full">
-                        <div className="flex-1 min-w-0">
+                      <div className="flex flex-col sm:flex-row gap-4 h-full">
+                        <div className="flex-1 min-w-0 min-h-[200px]">
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                               <Pie
@@ -651,7 +651,7 @@ export default function DashboardPage() {
                             </PieChart>
                           </ResponsiveContainer>
                         </div>
-                        <div className="flex flex-col justify-center gap-1.5 min-w-[200px] max-w-[220px] overflow-y-auto pr-1 custom-scrollbar">
+                        <div className="flex flex-col justify-center gap-1.5 w-full sm:min-w-[200px] sm:max-w-[220px] max-h-[160px] sm:max-h-none overflow-y-auto pr-1 custom-scrollbar">
                           {categoryChartData.map((entry, index) => {
                             const pct = total > 0 ? (entry.value / total) * 100 : 0;
                             return (

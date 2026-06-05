@@ -476,7 +476,7 @@ export default function NuevaRequisaView() {
         </div>
 
         {/* Right Column: Items */}
-        <div className="lg:col-span-2 bg-white border border-gray-100 p-6 shadow-sm flex flex-col h-[600px] relative">
+        <div className="lg:col-span-2 bg-white border border-gray-100 p-4 sm:p-6 shadow-sm flex flex-col h-[70vh] min-h-[420px] lg:h-[600px] relative">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-3 mb-4">
             4. Registro de Artículos
           </h3>

@@ -231,24 +231,24 @@ export default function AlmacenPage() {
           <h1 className="text-3xl font-light text-primary tracking-tight">Productos</h1>
           <p className="text-gray-500 mt-2 text-sm">Catálogo de artículos y control de existencias.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3 w-full sm:w-auto">
           <button
             onClick={handleExportExcel}
-            className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-5 py-3 text-sm font-semibold transition-colors shadow-sm"
+            className="flex items-center justify-center gap-2 flex-1 sm:flex-none bg-green-700 hover:bg-green-800 text-white px-5 py-3 text-sm font-semibold transition-colors shadow-sm"
           >
             <FileSpreadsheet size={16} />
             Exportar Excel
           </button>
           <Link
             href="/productos/conteo"
-            className="flex items-center gap-2 bg-white border border-gray-200 text-primary px-5 py-3 text-sm font-semibold hover:border-primary hover:bg-gray-50 transition-all shadow-sm"
+            className="flex items-center justify-center gap-2 flex-1 sm:flex-none bg-white border border-gray-200 text-primary px-5 py-3 text-sm font-semibold hover:border-primary hover:bg-gray-50 transition-all shadow-sm"
           >
             <ClipboardList size={16} />
             Conteo Físico
           </Link>
           <button
             onClick={handleNewClick}
-            className="flex items-center gap-2 bg-primary text-background px-5 py-3 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"
+            className="flex items-center justify-center gap-2 flex-1 sm:flex-none bg-primary text-background px-5 py-3 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"
           >
             <Plus size={18} strokeWidth={2.5} />
             Nuevo Artículo
