@@ -231,26 +231,27 @@ export default function NuevaCompraView() {
 
       const [
         { data: purchaseItemsData },
-        { data: movementsOut },
-        { data: movementsIn },
+        { data: deliveredItems },
+        { data: receivedItems },
         { data: pendingOCItems },
       ] = await Promise.all([
         supabase
           .from('purchase_items')
           .select('inventory_item_id, quantity, unit_cost, inventory_items(id, code, name, quantity, committed_quantity)')
           .eq('purchase_id', pData.id),
+        // Consumo real: requisas entregadas en los últimos 90 días
         supabase
-          .from('stock_movements')
-          .select('inventory_item_id, quantity')
-          .eq('movement_type', 'OUT')
+          .from('requisition_items')
+          .select('inventory_item_id, quantity, delivered_quantity, requisitions!inner(status, created_at)')
+          .eq('requisitions.status', 'ENTREGADA')
           .in('inventory_item_id', itemIds)
-          .gte('created_at', ninetyDaysAgo.toISOString()),
+          .gte('requisitions.created_at', ninetyDaysAgo.toISOString()),
+        // Última entrada: OCs recibidas
         supabase
-          .from('stock_movements')
-          .select('inventory_item_id, created_at')
-          .eq('movement_type', 'IN')
-          .in('inventory_item_id', itemIds)
-          .order('created_at', { ascending: false }),
+          .from('purchase_items')
+          .select('inventory_item_id, purchases!inner(status, created_at)')
+          .eq('purchases.status', 'RECIBIDA')
+          .in('inventory_item_id', itemIds),
         supabase
           .from('purchase_items')
           .select('inventory_item_id, quantity, purchases!inner(id, status)')
@@ -261,13 +262,18 @@ export default function NuevaCompraView() {
 
       // Build maps
       const consumptionMap: Record<string, number> = {};
-      (movementsOut || []).forEach(m => {
-        consumptionMap[m.inventory_item_id] = (consumptionMap[m.inventory_item_id] || 0) + (m.quantity || 0);
+      (deliveredItems || []).forEach((m: any) => {
+        const qty = (m.delivered_quantity ?? m.quantity) || 0;
+        consumptionMap[m.inventory_item_id] = (consumptionMap[m.inventory_item_id] || 0) + qty;
       });
 
       const lastInMap: Record<string, string> = {};
-      (movementsIn || []).forEach(m => {
-        if (!lastInMap[m.inventory_item_id]) lastInMap[m.inventory_item_id] = m.created_at;
+      (receivedItems || []).forEach((m: any) => {
+        const receivedAt = m.purchases?.created_at;
+        if (!receivedAt) return;
+        if (!lastInMap[m.inventory_item_id] || receivedAt > lastInMap[m.inventory_item_id]) {
+          lastInMap[m.inventory_item_id] = receivedAt;
+        }
       });
 
       const pendingOCMap: Record<string, number> = {};

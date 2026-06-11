@@ -3,6 +3,10 @@
     {
       "path": "/api/stock-alert",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/update-exchange-rate",
+      "schedule": "0 12 * * *"
     }
   ]
 }

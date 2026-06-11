@@ -1,11 +1,14 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Save, DollarSign, Loader2 } from 'lucide-react';
+import { Save, DollarSign, Loader2, RefreshCw } from 'lucide-react';
 import { FormSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 
 export default function ConfiguracionPage() {
   const [exchangeRate, setExchangeRate] = useState<string>('');
+  const [savedRate, setSavedRate] = useState<string>('');
+  const [autoUpdate, setAutoUpdate] = useState(true);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -18,9 +21,12 @@ export default function ConfiguracionPage() {
         .select('*')
         .eq('id', 1)
         .single();
-        
+
       if (data) {
         setExchangeRate(data.exchange_rate_usd_hnl.toString());
+        setSavedRate(data.exchange_rate_usd_hnl.toString());
+        setAutoUpdate(data.rate_auto_update !== false);
+        setLastUpdatedAt(data.updated_at || null);
       }
       if (error && error.code !== 'PGRST116') { // PGRST116 means zero rows returned
          console.error('Error fetching global settings:', error);
@@ -37,20 +43,59 @@ export default function ConfiguracionPage() {
       return;
     }
 
+    // Si el usuario cambió la tasa a mano, se desactiva la actualización automática
+    // para que el cron diario del BCH no sobreescriba su valor.
+    const rateChangedManually = exchangeRate !== savedRate;
+    const newAutoUpdate = rateChangedManually ? false : autoUpdate;
+
     setIsSaving(true);
     setMessage(null);
 
     const { error } = await supabase
       .from('global_settings')
-      .upsert({ id: 1, exchange_rate_usd_hnl: Number(exchangeRate) }, { onConflict: 'id' });
+      .upsert({
+        id: 1,
+        exchange_rate_usd_hnl: Number(exchangeRate),
+        rate_auto_update: newAutoUpdate,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
 
     setIsSaving(false);
 
     if (error) {
       setMessage({ type: 'error', text: 'Error guardando la configuración: ' + error.message });
     } else {
-      setMessage({ type: 'success', text: 'Tasa de cambio actualizada existosamente.' });
-      setTimeout(() => setMessage(null), 3000);
+      setSavedRate(exchangeRate);
+      setAutoUpdate(newAutoUpdate);
+      setLastUpdatedAt(new Date().toISOString());
+      setMessage({
+        type: 'success',
+        text: rateChangedManually
+          ? 'Tasa manual guardada. La actualización automática del BCH quedó desactivada.'
+          : 'Configuración guardada exitosamente.',
+      });
+      setTimeout(() => setMessage(null), 5000);
+    }
+  };
+
+  const handleToggleAutoUpdate = async () => {
+    const next = !autoUpdate;
+    setAutoUpdate(next);
+    const { error } = await supabase
+      .from('global_settings')
+      .update({ rate_auto_update: next })
+      .eq('id', 1);
+    if (error) {
+      setAutoUpdate(!next);
+      setMessage({ type: 'error', text: 'Error actualizando la configuración: ' + error.message });
+    } else {
+      setMessage({
+        type: 'success',
+        text: next
+          ? 'Actualización automática activada. La tasa se sincronizará a diario con el BCH.'
+          : 'Actualización automática desactivada. Regirá la tasa manual.',
+      });
+      setTimeout(() => setMessage(null), 5000);
     }
   };
 
@@ -68,7 +113,38 @@ export default function ConfiguracionPage() {
           <FormSkeleton fields={3} />
         ) : (
           <div className="space-y-6">
-            
+
+            {/* Aviso de sincronización con BCH */}
+            <div className={`p-4 border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${autoUpdate ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'}`}>
+              <div className="flex items-start gap-3">
+                <div className={`p-2 text-white shrink-0 ${autoUpdate ? 'bg-blue-500' : 'bg-amber-500'}`}>
+                  <RefreshCw size={16} />
+                </div>
+                <div>
+                  <p className={`text-xs font-bold uppercase tracking-widest ${autoUpdate ? 'text-blue-700' : 'text-amber-700'}`}>
+                    {autoUpdate ? 'Actualización automática activa' : 'Tasa manual (automática desactivada)'}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                    {autoUpdate
+                      ? 'La tasa se sincroniza cada día con la Web API oficial del Banco Central de Honduras (Tipo de Cambio Nominal - Venta). Si guardas un valor manual, la sincronización se desactivará.'
+                      : 'El sistema está usando la tasa ingresada manualmente. Activa la sincronización para volver a usar el valor diario del BCH.'}
+                    {lastUpdatedAt && (
+                      <span className="block mt-1 text-gray-400">
+                        Última actualización: {new Date(lastUpdatedAt).toLocaleString('es-HN')}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleToggleAutoUpdate}
+                className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${autoUpdate ? 'bg-blue-500' : 'bg-gray-300'}`}
+                title={autoUpdate ? 'Desactivar actualización automática' : 'Activar actualización automática'}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoUpdate ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-2">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-widest">Tasa de Cambio Base</label>
