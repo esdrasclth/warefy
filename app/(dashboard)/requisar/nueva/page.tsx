@@ -34,6 +34,7 @@ interface Employee {
   area_name?: string;
   area_id?: string;
   position?: string;
+  user_id?: string;
 }
 
 export default function NuevaRequisaView() {
@@ -76,6 +77,7 @@ export default function NuevaRequisaView() {
         .from('inventory_items')
         .select('*, categories(name), units!unit_id(name), units_per_package, package_unit:units!package_unit_id(name)')
         .eq('status', 'ACTIVE')
+        .eq('is_assignable', false)
         .or(`code.ilike.%${q}%,name.ilike.%${q}%`)
         .order('name')
         .limit(10);
@@ -133,12 +135,14 @@ export default function NuevaRequisaView() {
       const q = approverSearchInput.trim();
       if (!q || approverData) { setApproverResults([]); return; }
       setIsSearchingApprover(true);
+      // Solo empleados con cuenta de rol APROBADOR (o ADMIN) pueden aprobar requisas
       const { data } = await supabase
-        .from('employees')
-        .select('*')
-        .or(`code.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%`)
+        .from('profiles')
+        .select('id, role, employees!inner(*)')
+        .in('role', ['APROBADOR', 'ADMIN'])
+        .or(`code.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%`, { foreignTable: 'employees' })
         .limit(5);
-      setApproverResults(data || []);
+      setApproverResults((data || []).map((p: any) => ({ ...p.employees, user_id: p.id })));
       setIsSearchingApprover(false);
     }, 300);
     return () => clearTimeout(timer);
@@ -260,9 +264,10 @@ export default function NuevaRequisaView() {
         }
       }
 
-      const finalStatus = isOverLimit ? 'PENDIENTE DE APROBACION' : 'PENDIENTE';
+      // Todas las requisas requieren aprobación del aprobador asignado antes de llegar a almacén
+      const finalStatus = 'PENDIENTE DE APROBACION';
       if (isOverLimit) {
-        alert(`🚨 ATENCIÓN: Esta requisa excedió los límites establecidos.\n\nMotivos:\n- ${limitReasons.join('\n- ')}\n\nLa requisa será guardada con estado "PENDIENTE DE APROBACION" y requiere revisión gerencial.`);
+        alert(`🚨 ATENCIÓN: Esta requisa excedió los límites establecidos.\n\nMotivos:\n- ${limitReasons.join('\n- ')}\n\nEsta información será visible para el aprobador durante su revisión.`);
       }
       // --- END VALIDATION ---
 
@@ -294,9 +299,7 @@ export default function NuevaRequisaView() {
       const { error: itemsError } = await supabase.from('requisition_items').insert(reqItemsData);
       if (itemsError) throw itemsError;
 
-      if (finalStatus === 'PENDIENTE DE APROBACION') {
-        notifyPendingApproval(reqData.consecutive, reqData.id, `${requesterData.first_name} ${requesterData.last_name}`);
-      }
+      notifyPendingApproval(reqData.consecutive, reqData.id, `${requesterData.first_name} ${requesterData.last_name}`, approverData.user_id);
 
       // Pasar la nueva requisa a la lista para mostrarla de inmediato (sin esperar fetch)
       const optimisticRequisition = {
@@ -321,32 +324,32 @@ export default function NuevaRequisaView() {
 
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto pb-12">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto pb-28 sm:pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-100 pb-6">
-        <div className="flex items-center gap-4">
-          <Link href="/requisar" className="p-2 border border-gray-200 text-gray-500 hover:text-primary hover:border-primary transition-colors bg-white">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-100 pb-4 sm:pb-6">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <Link href="/requisar" className="p-2 border border-gray-200 text-gray-500 hover:text-primary hover:border-primary transition-colors bg-white shrink-0">
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <h1 className="text-3xl font-light text-primary tracking-tight">Nueva Requisa Directa</h1>
-            <p className="text-gray-500 mt-1 text-sm">Registro rápido utilizando códigos de empleado y catálogo.</p>
+            <h1 className="text-2xl sm:text-3xl font-light text-primary tracking-tight">Nueva Requisa Directa</h1>
+            <p className="text-gray-500 mt-1 text-xs sm:text-sm">Registro rápido utilizando códigos de empleado y catálogo.</p>
           </div>
         </div>
-        
-        <button 
+
+        <button
           onClick={handleSubmit} disabled={isSaving || selectedItems.length === 0 || !requesterData || !approverData}
-          className="flex items-center gap-2 bg-primary text-background px-6 py-3 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent disabled:opacity-50"
+          className="hidden sm:flex items-center gap-2 bg-primary text-background px-6 py-3 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent disabled:opacity-50"
         >
           {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
           Generar Requisa
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
 
         {/* Left Column: Responsibles */}
-        <div className="lg:col-span-1 space-y-8">
+        <div className="lg:col-span-1 space-y-6 sm:space-y-8">
           
           {/* Box: Solicitante */}
           <div className="bg-white border border-gray-100 p-6 shadow-sm relative">
@@ -476,7 +479,7 @@ export default function NuevaRequisaView() {
         </div>
 
         {/* Right Column: Items */}
-        <div className="lg:col-span-2 bg-white border border-gray-100 p-4 sm:p-6 shadow-sm flex flex-col h-[70vh] min-h-[420px] lg:h-[600px] relative">
+        <div className="lg:col-span-2 bg-white border border-gray-100 p-4 sm:p-6 shadow-sm flex flex-col h-auto lg:h-[600px] relative">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-3 mb-4">
             4. Registro de Artículos
           </h3>
@@ -534,7 +537,7 @@ export default function NuevaRequisaView() {
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-2 border border-gray-200 bg-gray-50/50 p-2 custom-scrollbar">
+          <div className="flex-1 min-h-[180px] lg:min-h-0 overflow-y-visible lg:overflow-y-auto space-y-2 border border-gray-200 bg-gray-50/50 p-2 custom-scrollbar">
             {selectedItems.length === 0 ? (
                <div className="h-full flex flex-col items-center justify-center text-gray-400 text-sm opacity-60">
                  <Search size={32} className="mb-2" />
@@ -545,9 +548,9 @@ export default function NuevaRequisaView() {
                 const availableStock = item.inventoryItem.quantity - (item.inventoryItem.committed_quantity || 0);
                 
                 return (
-                  <div key={item.inventoryItem.id} className="flex items-center gap-3 bg-white border border-gray-100 p-3 shadow-sm group animate-in slide-in-from-top-2">
+                  <div key={item.inventoryItem.id} className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 bg-white border border-gray-100 p-3 shadow-sm group animate-in slide-in-from-top-2">
                      <span className="text-xs font-bold text-gray-300 w-4 text-center shrink-0">{i + 1}</span>
-                     <div className="flex-1 min-w-0">
+                     <div className="flex-1 min-w-0 basis-[calc(100%-3rem)] sm:basis-auto">
                        <p className="text-sm font-semibold text-primary truncate">{item.inventoryItem.name}</p>
                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                          <p className="text-[10px] text-gray-400 font-mono tracking-wider">{item.inventoryItem.code}</p>
@@ -561,8 +564,8 @@ export default function NuevaRequisaView() {
                          )}
                        </div>
                      </div>
-                     <div className="flex items-center gap-3">
-                       <div className="flex flex-col items-center">
+                     <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto pl-7 sm:pl-0 pt-2 sm:pt-0 border-t border-gray-50 sm:border-0">
+                       <div className="flex flex-col items-start sm:items-center">
                          <span className="text-[9px] text-gray-400 uppercase tracking-widest">
                            Cant. ({item.inventoryItem.units?.name || 'und'})
                          </span>
@@ -572,7 +575,7 @@ export default function NuevaRequisaView() {
                            max={availableStock}
                            value={item.quantity || ""}
                            onChange={(e) => handleUpdateQuantity(item.inventoryItem.id, e.target.value)}
-                           className="w-16 border border-gray-200 px-2 py-1 text-sm text-center focus:outline-none focus:border-primary font-bold text-primary"
+                           className="w-20 sm:w-16 border border-gray-200 px-2 py-2 sm:py-1 text-sm text-center focus:outline-none focus:border-primary font-bold text-primary"
                          />
                          {item.inventoryItem.units_per_package && item.inventoryItem.package_unit?.name && item.quantity > 0 && (
                            <span className="text-[9px] text-blue-500 font-semibold mt-0.5">
@@ -599,8 +602,8 @@ export default function NuevaRequisaView() {
                            </span>
                          )}
                        </div>
-                       <button onClick={() => handleRemoveItem(item.inventoryItem.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors mt-3 shrink-0">
-                         <Trash2 size={16} />
+                       <button onClick={() => handleRemoveItem(item.inventoryItem.id)} className="p-2 sm:p-1.5 text-gray-400 hover:text-red-500 transition-colors sm:mt-3 shrink-0">
+                         <Trash2 size={18} />
                        </button>
                      </div>
                   </div>
@@ -626,6 +629,25 @@ export default function NuevaRequisaView() {
           
         </div>
 
+      </div>
+
+      {/* Barra fija inferior (solo móvil) */}
+      <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] px-4 py-3 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[9px] text-gray-400 uppercase tracking-widest">
+            {selectedItems.length} artículo(s)
+          </p>
+          <p className="text-base font-bold text-primary truncate">
+            ${selectedItems.reduce((acc, curr) => acc + (curr.quantity * curr.inventoryItem.price), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+        </div>
+        <button
+          onClick={handleSubmit} disabled={isSaving || selectedItems.length === 0 || !requesterData || !approverData}
+          className="flex items-center justify-center gap-2 bg-primary text-background px-5 py-3 text-xs font-bold uppercase tracking-widest hover:bg-primary-dark transition-all shadow-sm disabled:opacity-50 shrink-0"
+        >
+          {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+          Generar Requisa
+        </button>
       </div>
     </div>
   );

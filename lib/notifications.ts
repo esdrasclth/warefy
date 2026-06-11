@@ -39,13 +39,14 @@ export async function notifyLowStock(productName: string, productId: string, cur
   });
 }
 
-export async function notifyPendingApproval(consecutive: number, requisitionId: string, requester: string) {
+export async function notifyPendingApproval(consecutive: number, requisitionId: string, requester: string, approverUserId?: string) {
   await createNotification({
     type: 'pending_approval',
     title: 'Requisa pendiente de aprobación',
-    message: `REQ-${String(consecutive).padStart(6, '0')} de ${requester} superó límites y requiere revisión.`,
+    message: `REQ-${String(consecutive).padStart(6, '0')} de ${requester} requiere tu aprobación.`,
     link: `/requisar/${requisitionId}`,
-    targetRole: 'ADMIN',
+    targetRole: approverUserId ? undefined : 'ADMIN',
+    targetUserId: approverUserId,
   });
 }
 

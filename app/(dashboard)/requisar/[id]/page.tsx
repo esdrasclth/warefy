@@ -56,7 +56,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, employees(area_id)')
+      .select('role, employees(area_id, code)')
       .eq('id', session.user.id)
       .single();
 
@@ -77,7 +77,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
     }
   }, [isLoading, requisition, searchParams]);
 
-  const updateStatus = async (newStatus: 'ENTREGADA' | 'CANCELADA') => {
+  const updateStatus = async (newStatus: 'ENTREGADA' | 'CANCELADA' | 'PENDIENTE') => {
     if (confirm(`¿Estás seguro de marcar esta requisa como ${newStatus}?`)) {
       setIsLoading(true);
       try {
@@ -126,6 +126,8 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
   const isAdminOrAlmacen = userProfile?.role === 'ADMIN' || userProfile?.role === 'ALMACEN';
   const isUser = userProfile?.role === 'USER';
   const isOwnArea = requisition.area_id === userProfile?.employees?.area_id;
+  const canApprove = userProfile?.role === 'ADMIN' ||
+    (userProfile?.role === 'APROBADOR' && requisition.approver_code === userProfile?.employees?.code);
   
   const effectiveTotalItems = requisition.requisition_items?.reduce((acc: number, item: any) => {
     const qty = requisition.status === 'PENDIENTE' 
@@ -200,8 +202,27 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
               )}
             </>
           )}
-          
-          <button 
+
+          {requisition.status === 'PENDIENTE DE APROBACION' && canApprove && (
+            <>
+              <button
+                onClick={() => updateStatus('PENDIENTE')}
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-bold shadow-sm transition-colors"
+                title="Aprobar y enviar a almacén"
+              >
+                <Check size={16} strokeWidth={3} /> Autorizar
+              </button>
+              <button
+                onClick={() => updateStatus('CANCELADA')}
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors"
+                title="Rechazar la requisa"
+              >
+                <X size={16} strokeWidth={3} /> Rechazar
+              </button>
+            </>
+          )}
+
+          <button
             onClick={() => window.print()}
             className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors"
           >

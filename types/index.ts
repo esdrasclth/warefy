@@ -1,4 +1,4 @@
-export type UserRole = 'ADMIN' | 'ALMACEN' | 'USER';
+export type UserRole = 'ADMIN' | 'ALMACEN' | 'USER' | 'APROBADOR';
 
 export interface Area {
   id: string;
@@ -62,6 +62,7 @@ export interface InventoryItem {
   package_unit_id?: string | null;
   units_per_package?: number | null;
   package_unit?: { name: string } | null;
+  is_assignable?: boolean;
   created_at?: string;
   updated_at?: string;
   categories?: Category;
@@ -148,6 +149,33 @@ export interface Budget {
   spent_budget: number;
   created_at?: string;
   updated_at?: string;
+}
+
+export type ToolAssignmentStatus = 'ACTIVA' | 'DEVUELTA' | 'TRANSFERIDA' | 'DANADA' | 'EXTRAVIADA';
+export type ToolAssignmentType = 'NUEVA' | 'REEMPLAZO_DANO' | 'REEMPLAZO_EXTRAVIO' | 'CAMBIO_ASIGNACION';
+
+export interface ToolAssignment {
+  id: string;
+  consecutive?: number;
+  inventory_item_id: string;
+  employee_id: string;
+  assigned_date: string;
+  serial_number?: string | null;
+  item_state: 'NUEVO' | 'USADO';
+  condition_notes?: string | null;
+  assignment_type: ToolAssignmentType;
+  previous_assignment_id?: string | null;
+  status: ToolAssignmentStatus;
+  return_date?: string | null;
+  return_notes?: string | null;
+  notes?: string | null;
+  assigned_by_name?: string | null;
+  unit_cost?: number;
+  area_name?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  inventory_items?: InventoryItem;
+  employees?: Employee;
 }
 
 export interface AreaBudget {

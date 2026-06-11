@@ -112,6 +112,10 @@ export default function RequisarPage() {
       query = query.eq('area_id', profile.employees.area_id);
     }
 
+    if (profile.role === 'APROBADOR' && profile.employees?.code) {
+      query = query.eq('approver_code', profile.employees.code);
+    }
+
     if (opts.status !== 'TODAS') {
       query = query.eq('status', opts.status);
     }
@@ -259,7 +263,7 @@ export default function RequisarPage() {
         </div>
         <Link
           href="/requisar/nueva"
-          className="flex items-center gap-2 bg-primary text-background px-5 h-10 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent"
+          className="flex items-center justify-center gap-2 bg-primary text-background px-5 h-11 sm:h-10 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent w-full sm:w-auto"
         >
           <Plus size={18} strokeWidth={2.5} />
           Nueva Requisa
@@ -356,17 +360,18 @@ export default function RequisarPage() {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
           {(['TODAS', 'PENDIENTE', 'PENDIENTE DE APROBACION', 'ENTREGADA', 'CANCELADA'] as const).map(status => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
-              className={`px-4 py-2 text-xs font-bold uppercase tracking-widest border transition-colors ${statusFilter === status
+              className={`px-4 py-2.5 sm:py-2 text-xs font-bold uppercase tracking-widest border transition-colors whitespace-nowrap flex-shrink-0 ${statusFilter === status
                   ? 'bg-primary text-white border-primary'
                   : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
                 }`}
             >
-              {status}
+              <span className="sm:hidden">{status === 'PENDIENTE DE APROBACION' ? 'POR APROBAR' : status}</span>
+              <span className="hidden sm:inline">{status}</span>
             </button>
           ))}
         </div>
@@ -375,9 +380,9 @@ export default function RequisarPage() {
       {/* Table Container */}
       <div className="bg-white border border-gray-100 shadow-sm overflow-hidden relative min-h-[400px]">
         {/* Table Header Bar */}
-        <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-primary border-b-2 border-white/20">
           <h2 className="text-xs font-bold text-white uppercase tracking-widest">
-            Listado de Requisas — {totalCount.toLocaleString()} resultados
+            <span className="hidden sm:inline">Listado de Requisas — </span>{totalCount.toLocaleString()} resultado(s)
           </h2>
           {totalPages > 1 && (
             <span className="text-xs text-white/60 font-medium">
@@ -392,7 +397,162 @@ export default function RequisarPage() {
           </div>
         )}
 
-        <div className="overflow-x-auto scrollbar-hide">
+        {/* Vista móvil: tarjetas */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {isLoading ? (
+            <div className="p-4 space-y-3">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="border border-gray-100 p-4 space-y-3 animate-pulse">
+                  <div className="flex justify-between">
+                    <div className="h-4 bg-gray-100 w-32" />
+                    <div className="h-4 bg-gray-100 w-20" />
+                  </div>
+                  <div className="h-3 bg-gray-100 w-full" />
+                  <div className="h-3 bg-gray-100 w-2/3" />
+                </div>
+              ))}
+            </div>
+          ) : requisitions.length > 0 ? (
+            requisitions.map((req) => {
+              const totalItems = req.requisition_items?.reduce((acc: number, curr: RequisitionItem) => acc + (curr.quantity || 0), 0) || 0;
+              const dateStr = req.created_at ? new Date(req.created_at).toLocaleDateString() : '-';
+              const isAdminOrAlmacen = userProfile?.role === 'ADMIN' || userProfile?.role === 'ALMACEN';
+              const isUser = userProfile?.role === 'USER';
+              const isOwnArea = req.area_id === userProfile?.employees?.area_id;
+              const canApprove = userProfile?.role === 'ADMIN' ||
+                (userProfile?.role === 'APROBADOR' && req.approver_code === userProfile?.employees?.code);
+              const isExpanded = expandedRows.has(req.id);
+
+              return (
+                <div key={req.id} className="p-4 space-y-3">
+                  {/* Encabezado de la tarjeta */}
+                  <button className="w-full flex justify-between items-start gap-3 text-left" onClick={() => toggleRow(req.id)}>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-primary">REQ-{String(req.consecutive || 0).padStart(6, '0')}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{dateStr}</p>
+                    </div>
+                    <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 border flex-shrink-0 ${getStatusColor(req.status)}`}>
+                      {req.status === 'PENDIENTE DE APROBACION' ? 'POR APROBAR' : req.status}
+                    </span>
+                  </button>
+
+                  {/* Datos */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                    <div>
+                      <p className="text-[9px] text-gray-400 uppercase tracking-widest">Área</p>
+                      <p className="text-gray-700 font-medium truncate">{req.area_name || 'Sin Área'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-gray-400 uppercase tracking-widest">Solicitante</p>
+                      <p className="text-gray-700 truncate">{req.requester_name || 'Anónimo'}</p>
+                    </div>
+                  </div>
+
+                  {/* Detalle expandible de productos */}
+                  <button
+                    onClick={() => toggleRow(req.id)}
+                    className="w-full flex items-center justify-between bg-gray-50 border border-gray-100 px-3 py-2.5 text-xs text-gray-600"
+                  >
+                    <span><span className="font-bold text-primary">{totalItems}</span> artículo(s) solicitados</span>
+                    {isExpanded ? <ChevronDown size={15} className="text-primary" /> : <ChevronRight size={15} className="text-gray-400" />}
+                  </button>
+
+                  {isExpanded && (
+                    <div className="border-l-2 border-primary/20 pl-3 space-y-2">
+                      {(req.requisition_items?.length ?? 0) > 0 ? (
+                        (req.requisition_items as RequisitionItem[]).map((item, i) => {
+                          const qty = item.quantity ?? 0;
+                          const delivered = item.delivered_quantity ?? (req.status === 'ENTREGADA' ? qty : null);
+                          return (
+                            <div key={i} className="flex justify-between items-start gap-3 text-xs py-1 border-b border-gray-50 last:border-0">
+                              <div className="min-w-0">
+                                <p className="text-gray-700 font-medium leading-tight">{item.inventory_items?.name || '-'}</p>
+                                <p className="text-[9px] text-gray-400 font-mono mt-0.5">{item.inventory_items?.code || '-'}</p>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                <p className="text-gray-600">Sol: <span className="font-bold">{qty}</span></p>
+                                <p className="text-[10px] mt-0.5">
+                                  {delivered !== null
+                                    ? <span className="text-green-600 font-semibold">Ent: {delivered}</span>
+                                    : <span className="text-gray-300">Sin entregar</span>}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">Sin productos registrados.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Acciones táctiles */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {req.status === 'PENDIENTE' && isAdminOrAlmacen && (
+                      <button
+                        onClick={() => updateStatus(req.id, 'ENTREGADA')}
+                        className="flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-widest border border-green-200 bg-green-50 text-green-700"
+                      >
+                        <Check size={13} strokeWidth={3} /> Entregar
+                      </button>
+                    )}
+                    {req.status === 'PENDIENTE' && (isAdminOrAlmacen || (isUser && isOwnArea)) && (
+                      <button
+                        onClick={() => updateStatus(req.id, 'CANCELADA')}
+                        className="flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-widest border border-red-200 bg-red-50 text-red-600"
+                      >
+                        <X size={13} strokeWidth={3} /> Cancelar
+                      </button>
+                    )}
+                    {req.status === 'PENDIENTE DE APROBACION' && canApprove && (
+                      <>
+                        <button
+                          onClick={() => updateStatus(req.id, 'PENDIENTE')}
+                          className="flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-widest border border-orange-200 bg-orange-50 text-orange-600"
+                        >
+                          <Check size={13} strokeWidth={3} /> Autorizar
+                        </button>
+                        <button
+                          onClick={() => updateStatus(req.id, 'CANCELADA')}
+                          className="flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-widest border border-red-200 bg-red-50 text-red-600"
+                        >
+                          <X size={13} strokeWidth={3} /> Rechazar
+                        </button>
+                      </>
+                    )}
+                    <Link
+                      href={`/requisar/${req.id}`}
+                      className="flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-widest border border-gray-200 bg-white text-gray-600"
+                    >
+                      <Eye size={13} /> Ver
+                    </Link>
+                    <Link
+                      href={`/requisar/${req.id}?print=true`}
+                      className="flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-widest border border-gray-200 bg-white text-gray-600"
+                    >
+                      <Printer size={13} /> Imprimir
+                    </Link>
+                    {userProfile?.role === 'ADMIN' && req.status !== 'ENTREGADA' && (
+                      <button
+                        onClick={() => handleDelete(req.id)}
+                        className="flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-widest border border-gray-200 bg-white text-gray-400"
+                      >
+                        <Trash2 size={13} /> Eliminar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="px-6 py-12 text-center text-gray-400 text-sm">
+              No se encontraron requisas con los filtros actuales.
+            </div>
+          )}
+        </div>
+
+        {/* Vista escritorio: tabla */}
+        <div className="hidden md:block overflow-x-auto scrollbar-hide">
           <table className="w-full text-left border-collapse table-fixed min-w-[1000px] lg:min-w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-[9px] font-bold text-primary/70 uppercase tracking-tighter">
@@ -415,6 +575,8 @@ export default function RequisarPage() {
                   const isAdminOrAlmacen = userProfile?.role === 'ADMIN' || userProfile?.role === 'ALMACEN';
                   const isUser = userProfile?.role === 'USER';
                   const isOwnArea = req.area_id === userProfile?.employees?.area_id;
+                  const canApprove = userProfile?.role === 'ADMIN' ||
+                    (userProfile?.role === 'APROBADOR' && req.approver_code === userProfile?.employees?.code);
 
                   return (
                     <React.Fragment key={req.id}>
@@ -469,14 +631,23 @@ export default function RequisarPage() {
                                 )}
                               </>
                             )}
-                            {req.status === 'PENDIENTE DE APROBACION' && isAdminOrAlmacen && (
-                              <button
-                                onClick={() => updateStatus(req.id, 'PENDIENTE')}
-                                className="p-1 text-orange-400 hover:text-orange-600 transition-colors"
-                                title="Autorizar"
-                              >
-                                <Check size={14} strokeWidth={3} />
-                              </button>
+                            {req.status === 'PENDIENTE DE APROBACION' && canApprove && (
+                              <>
+                                <button
+                                  onClick={() => updateStatus(req.id, 'PENDIENTE')}
+                                  className="p-1 text-orange-400 hover:text-orange-600 transition-colors"
+                                  title="Autorizar"
+                                >
+                                  <Check size={14} strokeWidth={3} />
+                                </button>
+                                <button
+                                  onClick={() => updateStatus(req.id, 'CANCELADA')}
+                                  className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                                  title="Rechazar"
+                                >
+                                  <X size={14} strokeWidth={3} />
+                                </button>
+                              </>
                             )}
                             <Link
                               href={`/requisar/${req.id}?print=true`}

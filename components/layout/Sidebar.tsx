@@ -2,12 +2,12 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, ClipboardList, Wallet, Users, X, Settings, BookOpen, ShoppingCart, TrendingDown, ScrollText, Truck } from 'lucide-react';
+import { LayoutDashboard, Package, ClipboardList, Wallet, Users, X, Settings, BookOpen, ShoppingCart, TrendingDown, ScrollText, Truck, Wrench } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
-  userRole?: 'ADMIN' | 'ALMACEN' | 'USER';
+  userRole?: 'ADMIN' | 'ALMACEN' | 'USER' | 'APROBADOR';
 }
 
 export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
@@ -19,7 +19,8 @@ export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
     { name: 'Compras', href: '/compras', icon: ShoppingCart, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Sugerencias', href: '/compras/sugerencias', icon: TrendingDown, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Proveedores', href: '/proveedores', icon: Truck, roles: ['ADMIN', 'ALMACEN'] },
-    { name: 'Requisar', href: '/requisar', icon: ClipboardList, roles: ['ADMIN', 'ALMACEN', 'USER'] },
+    { name: 'Requisar', href: '/requisar', icon: ClipboardList, roles: ['ADMIN', 'ALMACEN', 'USER', 'APROBADOR'] },
+    { name: 'Asignaciones', href: '/asignaciones', icon: Wrench, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Registros', href: '/registros', icon: BookOpen, roles: ['ADMIN', 'ALMACEN'] },
     { name: 'Presupuestos', href: '/presupuestos', icon: Wallet, roles: ['ADMIN'] },
     { name: 'Empleados', href: '/empleados', icon: Users, roles: ['ADMIN'] },

@@ -458,6 +458,7 @@ export default function EmpleadosPage() {
                   >
                     <option value="ADMIN">ADMINISTRADOR (Todo)</option>
                     <option value="ALMACEN">ALMACÉN (Inventario/Compras)</option>
+                    <option value="APROBADOR">APROBADOR (Aprueba Requisas)</option>
                     <option value="USER">USUARIO (Solo Requisas)</option>
                   </select>
                 </div>

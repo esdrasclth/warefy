@@ -62,9 +62,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         // Rutas permitidas por rol (whitelist)
         const ROLE_WHITELIST: Record<string, string[]> = {
-          ADMIN: ['/dashboard', '/productos', '/requisar', '/compras', '/empleados', '/presupuestos', '/configuracion', '/registros', '/auditoria', '/proveedores'],
-          ALMACEN: ['/dashboard', '/productos', '/requisar', '/compras', '/registros', '/proveedores'],
+          ADMIN: ['/dashboard', '/productos', '/requisar', '/compras', '/empleados', '/presupuestos', '/configuracion', '/registros', '/auditoria', '/proveedores', '/asignaciones'],
+          ALMACEN: ['/dashboard', '/productos', '/requisar', '/compras', '/registros', '/proveedores', '/asignaciones'],
           USER: ['/requisar'],
+          APROBADOR: ['/requisar'],
         };
 
         const roleAllowedRoutes = role ? ROLE_WHITELIST[role] : undefined;
@@ -77,7 +78,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const isPathAllowed = roleAllowedRoutes.some(path => pathname.startsWith(path));
         if (!isPathAllowed) {
           // SECURITY: Denegar cualquier ruta no incluida explícitamente en el whitelist
-          const redirectPath = role === 'USER' ? '/requisar' : '/dashboard';
+          const redirectPath = (role === 'USER' || role === 'APROBADOR') ? '/requisar' : '/dashboard';
           if (role !== 'ADMIN') {
             router.replace(redirectPath);
             return;
