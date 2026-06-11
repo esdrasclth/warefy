@@ -91,6 +91,7 @@ export default function DashboardPage() {
       { data: recentReqs },
       { data: stockItems },
       { data: areasWithBudgets },
+      { data: monthAssignments },
     ] = await Promise.all([
       supabase.from('inventory_items').select('id', { count: 'exact', head: true }).eq('status', 'ACTIVE'),
       supabase.from('area_budgets').select('monthly_budget'),
@@ -104,6 +105,12 @@ export default function DashboardPage() {
       supabase.from('requisitions').select('id, consecutive, created_at, status, area_name').gte('created_at', monthStart).lt('created_at', monthEnd).order('created_at', { ascending: false }).limit(5),
       supabase.from('inventory_items').select('id, name, code, quantity, committed_quantity, min_stock, max_stock, price, status').eq('status', 'ACTIVE'),
       supabase.from('area_budgets').select('monthly_budget, areas(name)'),
+      // Asignaciones de herramientas cuentan como gasto (excepto cambios de asignación)
+      supabase.from('tool_assignments')
+        .select('unit_cost, area_name')
+        .neq('assignment_type', 'CAMBIO_ASIGNACION')
+        .gte('created_at', monthStart)
+        .lt('created_at', monthEnd),
     ]);
 
     const totalBudget = budgets?.reduce((acc, b) => acc + (Number(b.monthly_budget) || 0), 0) || 0;
@@ -129,6 +136,14 @@ export default function DashboardPage() {
       if (req.area_name) {
         if (!budgetMap[req.area_name]) budgetMap[req.area_name] = { name: req.area_name, presupuesto: 0, consumido: 0 };
         budgetMap[req.area_name].consumido += cost;
+      }
+    });
+    monthAssignments?.forEach(a => {
+      const cost = Number(a.unit_cost) || 0;
+      monthlyCost += cost;
+      if (a.area_name) {
+        if (!budgetMap[a.area_name]) budgetMap[a.area_name] = { name: a.area_name, presupuesto: 0, consumido: 0 };
+        budgetMap[a.area_name].consumido += cost;
       }
     });
 
@@ -358,6 +373,10 @@ export default function DashboardPage() {
         }));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items' }, async () => {
+        const liveData = await fetchLiveMetrics(selectedMonth);
+        setState(prev => ({ ...prev, ...liveData }));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tool_assignments' }, async () => {
         const liveData = await fetchLiveMetrics(selectedMonth);
         setState(prev => ({ ...prev, ...liveData }));
       })

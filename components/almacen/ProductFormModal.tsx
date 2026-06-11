@@ -29,6 +29,7 @@ export interface ProductData {
   min_order_qty: number;
   package_unit_id?: string | null;
   units_per_package?: number | null;
+  is_assignable?: boolean;
 }
 
 interface ProductFormModalProps {
@@ -62,7 +63,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
   const [formData, setFormData] = useState<ProductData>({
     code: '', name: '', category_id: '', unit_id: '',
     quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE',
-    origin: 'LOCAL', lead_time_days: 5, min_order_qty: 1,
+    origin: 'LOCAL', lead_time_days: 5, min_order_qty: 1, is_assignable: false,
   });
 
   // Fetch Categories, Units and Global Settings
@@ -102,7 +103,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
         id: crypto.randomUUID(),
         code: '', name: '', category_id: '', unit_id: '',
         quantity: 0, min_stock: 0, max_stock: 0, price: 0, status: 'ACTIVE',
-        preferred_supplier_id: null, origin: 'LOCAL', lead_time_days: 5, min_order_qty: 1, package_unit_id: null, units_per_package: null,
+        preferred_supplier_id: null, origin: 'LOCAL', lead_time_days: 5, min_order_qty: 1, package_unit_id: null, units_per_package: null, is_assignable: false,
       });
       setRawValue('');
     }
@@ -234,6 +235,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
           min_order_qty: formData.min_order_qty,
           package_unit_id: formData.package_unit_id ?? null,
           units_per_package: formData.units_per_package ?? null,
+          is_assignable: formData.is_assignable ?? false,
         },
       });
       error = res.error;
@@ -257,6 +259,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
         min_order_qty: formData.min_order_qty,
         package_unit_id: formData.package_unit_id ?? null,
         units_per_package: formData.units_per_package ?? null,
+        is_assignable: formData.is_assignable ?? false,
       });
       error = res.error;
     }
@@ -337,10 +340,26 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
                   </div>
                   <div className="space-y-1 col-span-2">
                     <label className="text-xs font-semibold text-primary">Nombre del Artículo</label>
-                    <input 
+                    <input
                       value={formData.name} onChange={e => handleChange('name', e.target.value)}
-                      type="text" className="w-full border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors" placeholder="Ej. Resma Papel Bond A4" 
+                      type="text" className="w-full border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors" placeholder="Ej. Resma Papel Bond A4"
                     />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={`flex items-start gap-3 p-3 border cursor-pointer transition-colors ${formData.is_assignable ? 'border-primary bg-primary/5' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                      <input
+                        type="checkbox"
+                        checked={formData.is_assignable ?? false}
+                        onChange={e => setFormData(prev => ({ ...prev, is_assignable: e.target.checked }))}
+                        className="accent-primary w-4 h-4 mt-0.5 cursor-pointer"
+                      />
+                      <span>
+                        <span className="block text-xs font-semibold text-primary">Se entrega bajo asignación</span>
+                        <span className="block text-[10px] text-gray-400 mt-0.5">
+                          Herramientas o equipos que se asignan a un empleado responsable. Se gestionan desde el módulo de Asignaciones.
+                        </span>
+                      </span>
+                    </label>
                   </div>
                 </div>
               </div>
