@@ -18,6 +18,7 @@ export interface Employee {
   user_id?: string;
   created_at?: string;
   areas?: Area;
+  managed_areas?: Area[];
 }
 
 export interface UserProfile {

@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/utils/supabase/admin';
+import { requireAdmin } from '@/utils/supabase/requireAdmin';
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireAdmin(request);
+    if (auth.response) return auth.response;
+
     const { email, password, role, employeeId, first_name, last_name } = await request.json();
 
     if (!email || !password || !role || !employeeId) {

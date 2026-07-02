@@ -27,6 +27,7 @@ export default function EmpleadosPage() {
   // Form states
   const [newArea, setNewArea] = useState({ name: '', description: '' });
   const [newEmployee, setNewEmployee] = useState({ code: '', first_name: '', last_name: '', position: '', area_id: '' });
+  const [managedAreaIds, setManagedAreaIds] = useState<string[]>([]);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -41,9 +42,13 @@ export default function EmpleadosPage() {
     }
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/admin/get-banned-status', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+        },
         body: JSON.stringify({ userIds })
       });
       const data = await res.json();
@@ -61,18 +66,23 @@ export default function EmpleadosPage() {
     const { data: areasData } = await supabase.from('areas').select('*').order('name');
     if (areasData) setAreas(areasData);
 
-    // Fetch employees with area info
+    // Fetch employees with area info + áreas supervisadas
     const { data: employeesData } = await supabase
       .from('employees')
       .select(`
         *,
         area_name,
-        areas ( name )
+        areas ( name ),
+        employee_areas ( areas ( id, name ) )
       `)
       .order('first_name');
     if (employeesData) {
-      setEmployees(employeesData);
-      await fetchBannedStatus(employeesData);
+      const mapped = employeesData.map((e: any) => ({
+        ...e,
+        managed_areas: (e.employee_areas || []).map((ea: any) => ea.areas).filter(Boolean),
+      }));
+      setEmployees(mapped);
+      await fetchBannedStatus(mapped);
     }
     
     setIsLoading(false);
@@ -98,25 +108,39 @@ export default function EmpleadosPage() {
     }
   };
 
+  // Sincroniza las áreas supervisadas de un empleado (excluye el área principal).
+  const syncManagedAreas = async (employeeId: string, primaryAreaId: string) => {
+    const desired = managedAreaIds.filter(id => id && id !== primaryAreaId);
+    await supabase.from('employee_areas').delete().eq('employee_id', employeeId);
+    if (desired.length > 0) {
+      await supabase
+        .from('employee_areas')
+        .insert(desired.map(area_id => ({ employee_id: employeeId, area_id })));
+    }
+  };
+
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     const selectedArea = areas.find(a => a.id === newEmployee.area_id);
     const payload = {
       ...newEmployee,
-      area_name: selectedArea?.name || null 
+      area_name: selectedArea?.name || null
     };
 
-    const { error } = await supabase.from('employees').insert([payload]);
-    setIsSubmitting(false);
+    const { data: created, error } = await supabase.from('employees').insert([payload]).select('id').single();
 
     if (error) {
+      setIsSubmitting(false);
       toast.error('Error registrando empleado: ' + error.message);
-    } else {
-      toast.success('Empleado registrado correctamente.');
-      closeEmployeeModal();
-      fetchData();
+      return;
     }
+
+    if (created) await syncManagedAreas(created.id, newEmployee.area_id);
+    setIsSubmitting(false);
+    toast.success('Empleado registrado correctamente.');
+    closeEmployeeModal();
+    fetchData();
   };
 
   const handleUpdateEmployee = async (e: React.FormEvent) => {
@@ -135,15 +159,18 @@ export default function EmpleadosPage() {
     };
 
     const { error } = await supabase.from('employees').update(payload).eq('id', editingEmployee.id);
-    setIsSubmitting(false);
 
     if (error) {
+      setIsSubmitting(false);
       toast.error('Error actualizando empleado: ' + error.message);
-    } else {
-      toast.success('Empleado actualizado correctamente.');
-      closeEmployeeModal();
-      fetchData();
+      return;
     }
+
+    await syncManagedAreas(editingEmployee.id, newEmployee.area_id);
+    setIsSubmitting(false);
+    toast.success('Empleado actualizado correctamente.');
+    closeEmployeeModal();
+    fetchData();
   };
 
   const handleDeleteEmployee = async (id: string, name: string) => {
@@ -168,12 +195,14 @@ export default function EmpleadosPage() {
       position: emp.position || '',
       area_id: emp.area_id || ''
     });
+    setManagedAreaIds((emp.managed_areas || []).map(a => a.id));
     setIsEmployeeModalOpen(true);
   };
 
   const closeEmployeeModal = () => {
     setEditingEmployee(null);
     setNewEmployee({ code: '', first_name: '', last_name: '', position: '', area_id: '' });
+    setManagedAreaIds([]);
     setIsEmployeeModalOpen(false);
   };
 
@@ -379,9 +408,13 @@ export default function EmpleadosPage() {
                         setIsCreatingAccess(true);
                         setAccessMessage(null);
                         try {
+                          const { data: { session } } = await supabase.auth.getSession();
                           const res = await fetch('/api/admin/toggle-access', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: {
+                              'Content-Type': 'application/json',
+                              Authorization: `Bearer ${session?.access_token ?? ''}`,
+                            },
                             body: JSON.stringify({
                               userId: selectedEmployee.user_id,
                               action
@@ -470,9 +503,13 @@ export default function EmpleadosPage() {
                     setIsCreatingAccess(true);
                     setAccessMessage(null);
                     try {
+                      const { data: { session } } = await supabase.auth.getSession();
                       const response = await fetch('/api/admin/create-access', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {
+                          'Content-Type': 'application/json',
+                          Authorization: `Bearer ${session?.access_token ?? ''}`,
+                        },
                         body: JSON.stringify({
                           ...accessForm,
                           employeeId: selectedEmployee.id,
@@ -650,6 +687,32 @@ export default function EmpleadosPage() {
                 {areas.length === 0 && (
                   <p className="text-xs text-yellow-600 mt-1 flex items-center gap-1"><BookOpen size={12}/> Primero debes registrar un Área.</p>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Áreas Supervisadas (opcional)</label>
+                <p className="text-[11px] text-gray-400">Además de su área principal, este empleado podrá visualizar y gestionar requisas de las áreas que marques (útil para gerentes).</p>
+                <div className="max-h-40 overflow-y-auto border border-gray-200 divide-y divide-gray-100">
+                  {areas.filter(a => a.id !== newEmployee.area_id).map(a => {
+                    const checked = managedAreaIds.includes(a.id);
+                    return (
+                      <label key={a.id} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={e => setManagedAreaIds(prev =>
+                            e.target.checked ? [...prev, a.id] : prev.filter(id => id !== a.id)
+                          )}
+                          className="accent-primary"
+                        />
+                        <span className="text-gray-700">{a.name}</span>
+                      </label>
+                    );
+                  })}
+                  {areas.filter(a => a.id !== newEmployee.area_id).length === 0 && (
+                    <p className="px-3 py-2 text-xs text-gray-400">No hay otras áreas disponibles.</p>
+                  )}
+                </div>
               </div>
 
               <div className="pt-4 flex justify-end gap-3 border-t border-gray-100">

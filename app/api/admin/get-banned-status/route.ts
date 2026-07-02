@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/utils/supabase/admin';
+import { requireAdmin } from '@/utils/supabase/requireAdmin';
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireAdmin(request);
+    if (auth.response) return auth.response;
+
     const { userIds } = await request.json();
     if (!userIds || userIds.length === 0) {
       return NextResponse.json({ bannedIds: [] });

@@ -41,20 +41,29 @@ export default function RequisarPage() {
     return next;
   });
 
+  // Área principal + áreas supervisadas (gerentes). Vacío para ADMIN (ve todo).
+  const getAreaIds = (profile: UserProfile): string[] => {
+    const ids = new Set<string>();
+    if (profile.employees?.area_id) ids.add(profile.employees.area_id);
+    (profile.employees?.managed_areas || []).forEach(a => { if (a?.id) ids.add(a.id); });
+    return Array.from(ids);
+  };
+
   const fetchAreaMetrics = async (profile: UserProfile) => {
     const startOfMonth = new Date(
       new Date().getFullYear(), new Date().getMonth(), 1
     ).toISOString();
 
     const isAdmin = profile.role === 'ADMIN';
-    const areaId = profile.employees?.area_id;
+    const areaIds = getAreaIds(profile);
+    const scoped = !isAdmin && areaIds.length > 0;
 
     let consumoQuery = supabase
       .from('requisitions')
       .select('total_cost')
       .neq('status', 'CANCELADA')
       .gte('created_at', startOfMonth);
-    if (!isAdmin && areaId) consumoQuery = consumoQuery.eq('area_id', areaId);
+    if (scoped) consumoQuery = consumoQuery.in('area_id', areaIds);
     const { data: consumoData } = await consumoQuery;
     const consumoMes = consumoData?.reduce(
       (acc, r) => acc + (Number(r.total_cost) || 0), 0
@@ -64,19 +73,19 @@ export default function RequisarPage() {
       .from('requisitions')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', startOfMonth);
-    if (!isAdmin && areaId) countQuery = countQuery.eq('area_id', areaId);
+    if (scoped) countQuery = countQuery.in('area_id', areaIds);
     const { count: requisasMes } = await countQuery;
 
     let presupuestoAsignado: number | null = null;
-    if (!isAdmin && areaId) {
+    if (scoped) {
       const { data: budgetData } = await supabase
         .from('area_budgets')
         .select('monthly_budget')
-        .eq('area_id', areaId)
-        .single();
-      if (budgetData?.monthly_budget > 0) {
-        presupuestoAsignado = Number(budgetData?.monthly_budget || 0);
-      }
+        .in('area_id', areaIds);
+      const total = budgetData?.reduce(
+        (acc, b) => acc + (Number(b.monthly_budget) || 0), 0
+      ) || 0;
+      presupuestoAsignado = total > 0 ? total : null;
     } else if (isAdmin) {
       const { data: allBudgets } = await supabase
         .from('area_budgets')
@@ -108,8 +117,9 @@ export default function RequisarPage() {
         requisition_items ( quantity, delivered_quantity, unit_cost, inventory_items ( name, code ) )
       `, { count: 'exact' });
 
-    if (profile.role === 'USER' && profile.employees?.area_id) {
-      query = query.eq('area_id', profile.employees.area_id);
+    if (profile.role === 'USER') {
+      const areaIds = getAreaIds(profile);
+      if (areaIds.length > 0) query = query.in('area_id', areaIds);
     }
 
     if (profile.role === 'APROBADOR' && profile.employees?.code) {
@@ -157,11 +167,25 @@ export default function RequisarPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const { data: profile } = await supabase
+      const { data: rawProfile } = await supabase
         .from('profiles')
-        .select('*, employees(*)')
+        .select('*, employees(*, employee_areas(areas(id, name)))')
         .eq('id', session.user.id)
         .single();
+
+      const profile = rawProfile
+        ? {
+            ...rawProfile,
+            employees: rawProfile.employees
+              ? {
+                  ...rawProfile.employees,
+                  managed_areas: ((rawProfile.employees as any).employee_areas || [])
+                    .map((ea: any) => ea.areas)
+                    .filter(Boolean),
+                }
+              : rawProfile.employees,
+          }
+        : rawProfile;
 
       profileRef.current = profile;
       setUserProfile(profile);
@@ -418,7 +442,7 @@ export default function RequisarPage() {
               const dateStr = req.created_at ? new Date(req.created_at).toLocaleDateString() : '-';
               const isAdminOrAlmacen = userProfile?.role === 'ADMIN' || userProfile?.role === 'ALMACEN';
               const isUser = userProfile?.role === 'USER';
-              const isOwnArea = req.area_id === userProfile?.employees?.area_id;
+              const isOwnArea = !!userProfile && getAreaIds(userProfile).includes(req.area_id as string);
               const canApprove = userProfile?.role === 'ADMIN' ||
                 (userProfile?.role === 'APROBADOR' && req.approver_code === userProfile?.employees?.code);
               const isExpanded = expandedRows.has(req.id);
@@ -574,7 +598,7 @@ export default function RequisarPage() {
                   const dateStr = req.created_at ? new Date(req.created_at).toLocaleDateString() : '-';
                   const isAdminOrAlmacen = userProfile?.role === 'ADMIN' || userProfile?.role === 'ALMACEN';
                   const isUser = userProfile?.role === 'USER';
-                  const isOwnArea = req.area_id === userProfile?.employees?.area_id;
+                  const isOwnArea = !!userProfile && getAreaIds(userProfile).includes(req.area_id as string);
                   const canApprove = userProfile?.role === 'ADMIN' ||
                     (userProfile?.role === 'APROBADOR' && req.approver_code === userProfile?.employees?.code);
 
