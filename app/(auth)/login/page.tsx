@@ -15,9 +15,18 @@ function LoginPageContent() {
   const searchParams = useSearchParams();
   const errorParam = searchParams.get('error');
 
+  const landingRouteForSession = async (userId: string): Promise<string> => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .single();
+    return data?.role === 'USER' || data?.role === 'APROBADOR' ? '/requisar' : '/dashboard';
+  };
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.replace('/dashboard');
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) router.replace(await landingRouteForSession(session.user.id));
     });
   }, []);
 
@@ -33,9 +42,9 @@ function LoginPageContent() {
     setIsLoading(true);
     setErrorMsg('');
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      router.replace('/dashboard');
+      router.replace(await landingRouteForSession(data.user.id));
     } catch (error: any) {
       setErrorMsg(error.message || 'Error al iniciar sesión. Verifica tus credenciales.');
     } finally {

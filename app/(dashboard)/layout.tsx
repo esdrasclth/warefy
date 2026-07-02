@@ -43,7 +43,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           .single();
 
         if (profileError) {
-          // SECURITY: Usuarios sin perfil o con error de auth no deben acceder al dashboard
+          // SECURITY: Usuarios sin perfil o con error de auth no deben acceder al dashboard.
+          // Cerramos la sesión para que /login no rebote de vuelta al dashboard (loop).
+          await supabase.auth.signOut();
           if (profileError.code === 'PGRST116') {
             router.replace('/login?error=no_profile');
             return;
