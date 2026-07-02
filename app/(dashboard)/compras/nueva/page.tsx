@@ -5,6 +5,7 @@ import { ArrowLeft, Save, Loader2, Search, Trash2, X, UserPlus, Building2, Print
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useToast } from '@/components/ui/Toast';
+import { openPurchaseAuthReport, savePurchaseAuthReportSnapshot } from '@/lib/purchaseAuthReport';
 
 interface InventoryItem {
   id: string;
@@ -309,14 +310,17 @@ export default function NuevaCompraView() {
         };
       });
 
-      setReportData({
+      const reportSnapshot: ReportData = {
         consecutive: pData.consecutive,
         date: new Date(pData.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
         supplierName: selectedSupplier.name,
         total: totalCost,
         manualRef: manualRequisitionNumber.trim() || null,
         items: reportItems,
-      });
+      };
+      setReportData(reportSnapshot);
+      // Guarda el snapshot inmutable para poder reimprimir el reporte exacto más adelante.
+      await savePurchaseAuthReportSnapshot(pData.id, reportSnapshot);
       setIsLoadingReport(false);
 
     } catch (error: any) {
@@ -596,119 +600,12 @@ function AuthorizationReportModal({
   onClose: () => void;
 }) {
   const printedAt = new Date().toLocaleString('es-ES', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
   const handlePrint = () => {
     if (!reportData) return;
-
-    const coverageColor = (val: number | null) =>
-      val === null ? '#6b7280' : val < 2 ? '#dc2626' : val < 4 ? '#d97706' : '#16a34a';
-
-    const rows = reportData.items.map((item, i) => `
-      <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'}">
-        <td style="font-family:monospace">${item.code}</td>
-        <td style="font-weight:600">${item.name}</td>
-        <td style="text-align:center;font-weight:700;color:#1e40af">${item.quantitySolicited}</td>
-        <td style="text-align:right;font-weight:600">$${item.unitCost.toLocaleString('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-        <td style="text-align:right;font-weight:700;color:#15803d">$${(item.quantitySolicited * item.unitCost).toLocaleString('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-        <td style="text-align:center">${item.currentStock}</td>
-        <td style="text-align:center;font-weight:700;color:${item.pendingOC > 0 ? '#1e40af' : '#9ca3af'}">${item.pendingOC > 0 ? item.pendingOC : '—'}</td>
-        <td style="text-align:center">${item.avgMonthlyConsumption}</td>
-        <td style="text-align:center">${item.avgWeeklyConsumption}</td>
-        <td style="text-align:center;font-weight:700;color:${coverageColor(item.coverageWeeksCurrent)}">
-          ${item.coverageWeeksCurrent === null ? '∞' : `${item.coverageWeeksCurrent} sem.`}
-        </td>
-        <td style="text-align:center;font-weight:700;color:${coverageColor(item.coverageWeeksWithPurchase)}">
-          ${item.coverageWeeksWithPurchase === null ? '∞' : `${item.coverageWeeksWithPurchase} sem.`}
-        </td>
-        <td style="text-align:center;color:#6b7280">${item.lastPurchaseDate || 'Sin historial'}</td>
-      </tr>`).join('');
-
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>COM-${String(reportData.consecutive).padStart(6, '0')} — Warefy</title>
-  <style>
-    @page { size: letter landscape; margin: 1cm; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 10pt; color: #111; background: white; }
-    .header { background: #001d3d; color: white; padding: 14px 20px; margin-bottom: 16px; }
-    .header h1 { font-size: 13pt; font-weight: bold; text-transform: uppercase; letter-spacing: .05em; }
-    .header p { font-size: 8pt; color: rgba(255,255,255,.7); margin-top: 3px; }
-    .meta { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; background: #f9fafb; border: 1px solid #e5e7eb; padding: 12px 16px; margin-bottom: 16px; }
-    .meta-item label { display: block; font-size: 7pt; font-weight: bold; color: #9ca3af; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
-    .meta-item span { font-size: 10pt; font-weight: 600; color: #111; }
-    .meta-item .big { font-size: 12pt; font-weight: 800; color: #001d3d; }
-    .meta-ref { grid-column: 1 / -1; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-top: 4px; }
-    table { width: 100%; border-collapse: collapse; font-size: 9pt; }
-    th { background: #001d3d; color: white; padding: 7px 8px; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; border: 1px solid #001d3d; text-align: center; }
-    th:first-child, th:nth-child(2) { text-align: left; }
-    td { padding: 6px 8px; border: 1px solid #d1d5db; vertical-align: middle; }
-    .signatures { display: grid; grid-template-columns: repeat(3,1fr); gap: 40px; margin-top: 40px; }
-    .sig-line { border-bottom: 1px solid #9ca3af; height: 36px; margin-bottom: 6px; }
-    .sig-label { text-align: center; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; }
-    .footer { text-align: right; font-size: 7pt; color: #d1d5db; margin-top: 24px; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>Warefy — Reporte de Autorización de Compra</h1>
-    <p>Generado el ${printedAt}</p>
-  </div>
-  <div class="meta">
-    <div class="meta-item">
-      <label>N° Compra</label>
-      <span class="big">COM-${String(reportData.consecutive).padStart(6, '0')}</span>
-    </div>
-    <div class="meta-item">
-      <label>Fecha</label>
-      <span>${reportData.date}</span>
-    </div>
-    <div class="meta-item">
-      <label>Proveedor</label>
-      <span>${reportData.supplierName}</span>
-    </div>
-    <div class="meta-item">
-      <label>Total</label>
-      <span class="big">$${reportData.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-    </div>
-    ${reportData.manualRef ? `<div class="meta-item meta-ref"><label>Referencia / Talonario</label><span>${reportData.manualRef}</span></div>` : ''}
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th>Código</th>
-        <th>Descripción</th>
-        <th>Cant. Solicitada</th>
-        <th>Precio Unit.</th>
-        <th>Subtotal</th>
-        <th>Inv. Actual</th>
-        <th>OC Pendiente</th>
-        <th>Cons. Mensual Prom.</th>
-        <th>Cons. Semanal Prom.</th>
-        <th>Sem. Disponibles</th>
-        <th>Sem. a Cubrir</th>
-        <th>Última Compra</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <div class="signatures">
-    ${['Solicitado por', 'Revisado por', 'Autorizado por'].map(l => `
-      <div><div class="sig-line"></div><div class="sig-label">${l}</div></div>`).join('')}
-  </div>
-  <div class="footer">Documento generado por Warefy · ${printedAt}</div>
-  <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }<\/script>
-</body>
-</html>`;
-
-    const win = window.open('', '_blank', 'width=900,height=650');
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
+    openPurchaseAuthReport(reportData);
   };
 
   return (

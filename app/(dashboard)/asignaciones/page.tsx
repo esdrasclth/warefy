@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Search, X, Save, Loader2, Wrench, Users, AlertTriangle, Undo2, ArrowRightLeft, ChevronDown, ShieldAlert, History, CheckCircle2, Printer } from 'lucide-react';
+import { Plus, Search, X, Save, Loader2, Wrench, Users, AlertTriangle, Undo2, ArrowRightLeft, ChevronDown, ShieldAlert, History, CheckCircle2, Printer, FileText, FileSpreadsheet } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
 import { useToast } from '@/components/ui/Toast';
@@ -70,6 +70,13 @@ export default function AsignacionesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODAS' | ToolAssignmentStatus>('ACTIVA');
 
+  // Modal reporte de inventario
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [reportArea, setReportArea] = useState('todas');
+
+  // Exportación a Excel
+  const [isExporting, setIsExporting] = useState(false);
+
   // Panel nueva asignación
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -135,6 +142,134 @@ export default function AsignacionesPage() {
     e ? `${e.first_name} ${e.last_name}`.trim() : '—';
 
   const activeAssignments = useMemo(() => assignments.filter(a => a.status === 'ACTIVA'), [assignments]);
+
+  // Áreas con al menos una asignación activa (para el reporte de inventario)
+  const reportAreas = useMemo(() => {
+    const set = new Set<string>();
+    activeAssignments.forEach(a => set.add(a.employees?.areas?.name || 'Sin Área'));
+    return [...set].sort((x, y) => x.localeCompare(y, 'es'));
+  }, [activeAssignments]);
+
+  const openReport = () => {
+    const areaQuery = reportArea === 'todas' ? 'todas' : encodeURIComponent(reportArea);
+    window.open(`/asignaciones/reporte?area=${areaQuery}&print=true`, '_blank');
+    setIsReportOpen(false);
+  };
+
+  const areaOf = (a: ToolAssignment) => a.area_name || a.employees?.areas?.name || 'Sin Área';
+  const isoDate = (d?: string | null) => (d ? d.slice(0, 10) : '');
+  const monthKey = (d?: string | null) => (d ? d.slice(0, 7) : '');
+
+  const handleExportExcel = async () => {
+    if (assignments.length === 0) { toast.warning('No hay asignaciones para exportar.'); return; }
+    setIsExporting(true);
+    try {
+      // Hoja 1: detalle completo (todas las asignaciones, todos los estatus)
+      const detailRows = assignments.map(a => {
+        const cost = Number(a.unit_cost) || 0;
+        return {
+          'N° Acta': `AS-${String(a.consecutive ?? 0).padStart(4, '0')}`,
+          'Estatus': STATUS_LABELS[a.status],
+          'Tipo': TYPE_LABELS[a.assignment_type],
+          'Código Producto': a.inventory_items?.code || '—',
+          'Descripción': a.inventory_items?.name || '—',
+          'N° Serie': a.serial_number || 'N/A',
+          'Estado Artículo': a.item_state,
+          'Área': areaOf(a),
+          'Código Empleado': a.employees?.code || '—',
+          'Empleado': empFullName(a.employees),
+          'Cargo': a.employees?.position || '—',
+          'Fecha Asignación': fmtDate(a.assigned_date),
+          'Fecha Cierre': a.return_date ? fmtDate(a.return_date) : '—',
+          'Costo Unitario (USD)': cost,
+          'Condición': a.condition_notes || '—',
+          'Observaciones': a.notes || '—',
+        };
+      });
+
+      // Hojas de resumen: solo asignaciones activas (valor actualmente entregado)
+      const active = assignments.filter(a => a.status === 'ACTIVA');
+
+      const byAreaMap = new Map<string, { count: number; monto: number }>();
+      active.forEach(a => {
+        const key = areaOf(a);
+        const acc = byAreaMap.get(key) || { count: 0, monto: 0 };
+        acc.count += 1;
+        acc.monto += Number(a.unit_cost) || 0;
+        byAreaMap.set(key, acc);
+      });
+      const areaRows = [...byAreaMap.entries()]
+        .sort((x, y) => x[0].localeCompare(y[0], 'es'))
+        .map(([area, v]) => ({ 'Área': area, 'Herramientas Activas': v.count, 'Monto Asignado (USD)': v.monto }));
+      areaRows.push({ 'Área': 'TOTAL', 'Herramientas Activas': active.length, 'Monto Asignado (USD)': areaRows.reduce((s, r) => s + r['Monto Asignado (USD)'], 0) });
+
+      const byEmpMap = new Map<string, { area: string; code: string; name: string; count: number; monto: number }>();
+      active.forEach(a => {
+        const acc = byEmpMap.get(a.employee_id) || { area: areaOf(a), code: a.employees?.code || '—', name: empFullName(a.employees), count: 0, monto: 0 };
+        acc.count += 1;
+        acc.monto += Number(a.unit_cost) || 0;
+        byEmpMap.set(a.employee_id, acc);
+      });
+      const empRows = [...byEmpMap.values()]
+        .sort((x, y) => x.area.localeCompare(y.area, 'es') || x.name.localeCompare(y.name, 'es'))
+        .map(v => ({ 'Área': v.area, 'Código Empleado': v.code, 'Empleado': v.name, 'Herramientas Activas': v.count, 'Monto Asignado (USD)': v.monto }));
+
+      // Hoja de incidentes: dañadas y extraviadas, con fecha filtrable por mes/área/empleado
+      const incidentRows = assignments
+        .filter(a => a.status === 'DANADA' || a.status === 'EXTRAVIADA')
+        .sort((x, y) => isoDate(y.return_date).localeCompare(isoDate(x.return_date)))
+        .map(a => ({
+          'N° Acta': `AS-${String(a.consecutive ?? 0).padStart(4, '0')}`,
+          'Estatus': STATUS_LABELS[a.status],
+          'Fecha Incidente': isoDate(a.return_date),
+          'Mes': monthKey(a.return_date),
+          'Área': areaOf(a),
+          'Código Empleado': a.employees?.code || '—',
+          'Empleado': empFullName(a.employees),
+          'Cargo': a.employees?.position || '—',
+          'Código Producto': a.inventory_items?.code || '—',
+          'Descripción': a.inventory_items?.name || '—',
+          'N° Serie': a.serial_number || 'N/A',
+          'Costo (USD)': Number(a.unit_cost) || 0,
+          'Fecha Asignación': isoDate(a.assigned_date),
+          'Detalle Incidente': a.return_notes || a.notes || '—',
+        }));
+
+      const XLSX = await import('xlsx');
+      const wb = XLSX.utils.book_new();
+
+      const wsDetail = XLSX.utils.json_to_sheet(detailRows);
+      wsDetail['!cols'] = [
+        { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 16 }, { wch: 38 }, { wch: 16 }, { wch: 14 },
+        { wch: 22 }, { wch: 16 }, { wch: 28 }, { wch: 20 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 36 }, { wch: 36 },
+      ];
+      XLSX.utils.book_append_sheet(wb, wsDetail, 'Detalle');
+
+      const wsArea = XLSX.utils.json_to_sheet(areaRows);
+      wsArea['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 22 }];
+      XLSX.utils.book_append_sheet(wb, wsArea, 'Resumen por Área');
+
+      const wsEmp = XLSX.utils.json_to_sheet(empRows);
+      wsEmp['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 28 }, { wch: 20 }, { wch: 22 }];
+      XLSX.utils.book_append_sheet(wb, wsEmp, 'Resumen por Empleado');
+
+      const wsIncidents = XLSX.utils.json_to_sheet(
+        incidentRows.length ? incidentRows : [{ 'N° Acta': 'Sin registros de daño o extravío' }]
+      );
+      wsIncidents['!cols'] = [
+        { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 22 }, { wch: 16 }, { wch: 28 },
+        { wch: 20 }, { wch: 16 }, { wch: 38 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 40 },
+      ];
+      XLSX.utils.book_append_sheet(wb, wsIncidents, 'Dañadas y Extraviadas');
+
+      XLSX.writeFile(wb, `asignaciones_completo_${today()}.xlsx`);
+      toast.success('Reporte exportado correctamente.');
+    } catch (e) {
+      toast.error('Error al exportar: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Asignaciones activas del producto seleccionado (para reemplazos)
   const replaceableCandidates = useMemo(() => {
@@ -341,12 +476,27 @@ export default function AsignacionesPage() {
           <h1 className="text-3xl font-light text-primary tracking-tight">Asignación de Herramientas</h1>
           <p className="text-gray-500 mt-1 text-sm">Control de herramientas y equipos entregados bajo responsabilidad de empleados.</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-primary text-background px-5 py-2.5 text-xs font-bold uppercase tracking-widest hover:bg-primary-dark transition-colors shadow-sm"
-        >
-          <Plus size={16} /> Nueva Asignación
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            className="flex items-center gap-2 bg-white text-green-700 border border-green-600 px-5 py-2.5 text-xs font-bold uppercase tracking-widest hover:bg-green-50 transition-colors shadow-sm disabled:opacity-50"
+          >
+            {isExporting ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />} Exportar Excel
+          </button>
+          <button
+            onClick={() => { setReportArea('todas'); setIsReportOpen(true); }}
+            className="flex items-center gap-2 bg-white text-primary border border-primary px-5 py-2.5 text-xs font-bold uppercase tracking-widest hover:bg-primary/5 transition-colors shadow-sm"
+          >
+            <FileText size={16} /> Reporte de Inventario
+          </button>
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-primary text-background px-5 py-2.5 text-xs font-bold uppercase tracking-widest hover:bg-primary-dark transition-colors shadow-sm"
+          >
+            <Plus size={16} /> Nueva Asignación
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -515,6 +665,55 @@ export default function AsignacionesPage() {
           </table>
         </div>
       </div>
+
+      {/* Modal: Reporte de Inventario */}
+      {isReportOpen && (
+        <div className="fixed inset-0 bg-primary/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white max-w-md w-full shadow-2xl border border-gray-100 animate-in zoom-in-95">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="text-lg font-light text-primary tracking-tight flex items-center gap-2">
+                <FileText size={18} /> Reporte de Inventario
+              </h2>
+              <button onClick={() => setIsReportOpen(false)} className="text-gray-400 hover:text-red-500 transition-colors">
+                <X size={20} strokeWidth={1.5} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-gray-500">
+                Genera un documento imprimible de las herramientas <span className="font-semibold">activas</span> agrupadas por área y empleado, con casillas de verificación para el conteo físico.
+              </p>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-primary">Alcance</label>
+                <select
+                  value={reportArea}
+                  onChange={e => setReportArea(e.target.value)}
+                  className="w-full border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
+                >
+                  <option value="todas">Reporte completo (todas las áreas)</option>
+                  {reportAreas.map(area => (
+                    <option key={area} value={area}>{area}</option>
+                  ))}
+                </select>
+                {reportAreas.length === 0 && (
+                  <p className="text-[10px] text-gray-400">No hay herramientas asignadas activas actualmente.</p>
+                )}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+              <button onClick={() => setIsReportOpen(false)} className="px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-gray-500 hover:bg-gray-50 transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={openReport}
+                disabled={reportAreas.length === 0}
+                className="px-5 py-2.5 bg-primary text-background text-xs font-bold uppercase tracking-widest hover:bg-primary-dark transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50"
+              >
+                <Printer size={16} /> Generar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Panel: Nueva Asignación */}
       {isPanelOpen && (

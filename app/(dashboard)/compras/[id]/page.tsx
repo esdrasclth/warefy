@@ -1,13 +1,14 @@
 'use client';
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Check, X, Printer, Package, Building2, Calendar, ShoppingCart, MessageSquare, ClipboardList } from 'lucide-react';
+import { ArrowLeft, Check, X, Printer, Package, Building2, Calendar, ShoppingCart, MessageSquare, ClipboardList, FileCheck2, Loader2 } from 'lucide-react';
 import { DetailSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useToast } from '@/components/ui/Toast';
 import { notifyPurchaseReceived } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
+import { fetchPurchaseAuthReportData, openPurchaseAuthReport } from '@/lib/purchaseAuthReport';
 
 export default function DetalleCompraPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -17,6 +18,23 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
   const [isLoading, setIsLoading] = useState(true);
 
   const [receivedQuantities, setReceivedQuantities] = useState<Record<string, number>>({});
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+
+  const handleAuthReport = async () => {
+    setIsGeneratingReport(true);
+    try {
+      const data = await fetchPurchaseAuthReportData(id);
+      if (!data) {
+        toast.error('No se pudo generar el reporte de autorización.');
+        return;
+      }
+      openPurchaseAuthReport(data);
+    } catch (e: any) {
+      toast.error('Error al generar el reporte: ' + e.message);
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
 
   const fetchPurchase = async () => {
     setIsLoading(true);
@@ -68,40 +86,23 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
     try {
       let newTotalCost = 0;
 
+      // 1. Persistir la cantidad recibida real por ítem antes de la recepción atómica.
       for (const item of purchase.purchase_items) {
         const actualQty = receivedQuantities[item.id] || 0;
         newTotalCost += actualQty * item.unit_cost;
 
-        // 1. Update Inventory
-        const { data: currentItem } = await supabase
-          .from('inventory_items')
-          .select('quantity')
-          .eq('id', item.inventory_items.id)
-          .single();
-
-        if (currentItem) {
-          const newStock = (currentItem.quantity || 0) + actualQty;
-          await supabase
-            .from('inventory_items')
-            .update({ quantity: newStock })
-            .eq('id', item.inventory_items.id);
-        }
-
-        // 2. Update Purchase Item with actual received quantity
-        await supabase
+        const { error: itemError } = await supabase
           .from('purchase_items')
           .update({ received_quantity: actualQty })
           .eq('id', item.id);
+        if (itemError) throw itemError;
       }
 
-      // 3. Update Purchase status and total cost
-      await supabase
-        .from('purchases')
-        .update({ 
-          status: 'RECIBIDA',
-          total_cost: newTotalCost
-        })
-        .eq('id', id);
+      // 2. Recepción atómica en BD: suma stock, calcula total_cost y marca RECIBIDA.
+      const { error: rpcError } = await supabase.rpc('receive_purchase', {
+        p_purchase_id: id
+      });
+      if (rpcError) throw rpcError;
 
       notifyPurchaseReceived(purchase.consecutive, id);
       logAudit({ tableName: 'purchases', recordId: id, action: 'STATUS_CHANGE', description: `OC #${purchase.consecutive} marcada como RECIBIDA. Total: $${newTotalCost.toFixed(2)}` });
@@ -152,6 +153,13 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
               <Check size={18} /> Confirmar Recepción
             </button>
           )}
+          <button
+            onClick={handleAuthReport}
+            disabled={isGeneratingReport}
+            className="flex items-center gap-2 bg-primary text-background px-5 py-2.5 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm disabled:opacity-50"
+          >
+            {isGeneratingReport ? <Loader2 size={18} className="animate-spin" /> : <FileCheck2 size={18} />} Reporte de Autorización
+          </button>
           <button onClick={() => window.print()} className="flex items-center gap-2 bg-white text-primary px-5 py-2.5 text-sm font-semibold border border-gray-200 hover:bg-gray-50 transition-all shadow-sm">
             <Printer size={18} /> Imprimir
           </button>
