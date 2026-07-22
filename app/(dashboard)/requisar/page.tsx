@@ -7,6 +7,7 @@ import Pagination from '@/components/ui/Pagination';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import type { Requisition, RequisitionItem, RequisitionStatus, UserProfile } from '@/types';
+import SignaturePad, { type SignaturePadHandle } from '@/components/ui/SignaturePad';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -34,6 +35,11 @@ export default function RequisarPage() {
   useEffect(() => { pageRef.current = page; }, [page]);
 
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const [signReqId, setSignReqId] = useState<string | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
+  const [hasSignature, setHasSignature] = useState(false);
+  const signatureRef = useRef<SignaturePadHandle>(null);
 
   const toggleRow = (id: string) => setExpandedRows(prev => {
     const next = new Set(prev);
@@ -262,6 +268,41 @@ export default function RequisarPage() {
         setRequisitions(snapshot);
         toast.error('Error actualizando estado: ' + error.message);
       }
+    }
+  };
+
+  const submitApproval = async () => {
+    const pad = signatureRef.current;
+    if (!pad || pad.isEmpty() || !signReqId) {
+      toast.error('Debe firmar para autorizar la requisa.');
+      return;
+    }
+    setIsApproving(true);
+    try {
+      const blob = await pad.toBlob();
+      if (!blob) throw new Error('No se pudo capturar la firma.');
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const formData = new FormData();
+      formData.append('requisitionId', signReqId);
+      formData.append('signature', blob, 'signature.png');
+
+      const response = await fetch('/api/requisitions/approve', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session?.access_token ?? ''}` },
+        body: formData,
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+
+      toast.success('Requisa autorizada correctamente.');
+      setRequisitions(prev => prev.map(r => r.id === signReqId ? { ...r, status: 'PENDIENTE' } : r));
+      setSignReqId(null);
+      setHasSignature(false);
+    } catch (error: any) {
+      toast.error('Error al autorizar: ' + error.message);
+    } finally {
+      setIsApproving(false);
     }
   };
 
@@ -531,7 +572,7 @@ export default function RequisarPage() {
                     {req.status === 'PENDIENTE DE APROBACION' && canApprove && (
                       <>
                         <button
-                          onClick={() => updateStatus(req.id, 'PENDIENTE')}
+                          onClick={() => setSignReqId(req.id)}
                           className="flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-widest border border-orange-200 bg-orange-50 text-orange-600"
                         >
                           <Check size={13} strokeWidth={3} /> Autorizar
@@ -658,7 +699,7 @@ export default function RequisarPage() {
                             {req.status === 'PENDIENTE DE APROBACION' && canApprove && (
                               <>
                                 <button
-                                  onClick={() => updateStatus(req.id, 'PENDIENTE')}
+                                  onClick={() => setSignReqId(req.id)}
                                   className="p-1 text-orange-400 hover:text-orange-600 transition-colors"
                                   title="Autorizar"
                                 >
@@ -764,6 +805,45 @@ export default function RequisarPage() {
           onPageChange={setPage}
         />
       </div>
+
+      {signReqId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white w-full max-w-md shadow-xl border border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="text-lg font-light text-primary">Firma de Autorización</h3>
+              <button
+                onClick={() => { if (!isApproving) { setSignReqId(null); setHasSignature(false); } }}
+                className="p-1 text-gray-400 hover:text-primary transition-colors"
+                disabled={isApproving}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-500">
+                Firme para autorizar la requisa. La firma quedará registrada en la impresión.
+              </p>
+              <SignaturePad ref={signatureRef} onChange={setHasSignature} />
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => { setSignReqId(null); setHasSignature(false); }}
+                  disabled={isApproving}
+                  className="flex-1 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-4 py-2.5 text-sm font-bold transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={submitApproval}
+                  disabled={isApproving || !hasSignature}
+                  className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 text-sm font-bold shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Check size={16} strokeWidth={3} /> {isApproving ? 'Autorizando...' : 'Autorizar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

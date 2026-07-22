@@ -41,7 +41,8 @@ export default function NuevaRequisaView() {
   const router = useRouter();
   const toast = useToast();
   const [isSaving, setIsSaving] = useState(false);
-  
+  const [isAdmin, setIsAdmin] = useState(false);
+
   // Requester State
   const [requesterSearchInput, setRequesterSearchInput] = useState('');
   const [requesterResults, setRequesterResults] = useState<Employee[]>([]);
@@ -62,6 +63,30 @@ export default function NuevaRequisaView() {
 
   // Comments
   const [comments, setComments] = useState('');
+
+  // Carga el usuario logueado y precarga el solicitante con su empleado vinculado
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, employees(*)')
+        .eq('id', session.user.id)
+        .single();
+
+      if (!profile) return;
+      setIsAdmin(profile.role === 'ADMIN');
+
+      const emp = profile.employees as unknown as Employee | null;
+      if (emp && emp.id) {
+        setRequesterData(emp);
+        setRequesterSearchInput(`${emp.first_name} ${emp.last_name}`);
+      }
+    };
+    loadCurrentUser();
+  }, []);
 
   useEffect(() => {
     const searchTimer = setTimeout(async () => {
@@ -356,54 +381,64 @@ export default function NuevaRequisaView() {
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-3 mb-4">
               1. Identificación del Solicitante
             </h3>
-            
-            <div className="relative mb-4">
-              <div className="flex items-center bg-gray-50 border border-gray-200 group focus-within:border-primary transition-colors">
-                <div className="pl-3 pr-2 text-gray-400">
-                  <Search size={18} />
+
+            {isAdmin && (
+              <div className="relative mb-4">
+                <div className="flex items-center bg-gray-50 border border-gray-200 group focus-within:border-primary transition-colors">
+                  <div className="pl-3 pr-2 text-gray-400">
+                    <Search size={18} />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Escribe Nombre o Código de Empleado..."
+                    value={requesterSearchInput}
+                    onChange={e => setRequesterSearchInput(e.target.value)}
+                    disabled={!!requesterData}
+                    className="w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none disabled:opacity-50"
+                  />
+                  {isSearchingRequester && (
+                    <div className="pr-3">
+                      <Loader2 size={16} className="animate-spin text-primary" />
+                    </div>
+                  )}
                 </div>
-                <input 
-                  type="text" 
-                  placeholder="Escribe Nombre o Código de Empleado..." 
-                  value={requesterSearchInput}
-                  onChange={e => setRequesterSearchInput(e.target.value)}
-                  disabled={!!requesterData}
-                  className="w-full px-3 py-2.5 text-sm bg-transparent focus:outline-none disabled:opacity-50"
-                />
-                {isSearchingRequester && (
-                  <div className="pr-3">
-                    <Loader2 size={16} className="animate-spin text-primary" />
+
+                {/* Dropdown Results */}
+                {requesterResults.length > 0 && !requesterData && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl z-[60] max-h-48 overflow-y-auto">
+                    {requesterResults.map(emp => (
+                      <button
+                        key={emp.id}
+                        onClick={() => { setRequesterData(emp); setRequesterSearchInput(`${emp.first_name} ${emp.last_name}`); setRequesterResults([]); }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors"
+                      >
+                        <p className="text-sm font-semibold text-primary">{emp.first_name} {emp.last_name}</p>
+                        <p className="text-[10px] text-gray-400 font-mono italic">{emp.code} • {emp.position || 'Emp.'} • {emp.area_name}</p>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
+            )}
 
-              {/* Dropdown Results */}
-              {requesterResults.length > 0 && !requesterData && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl z-[60] max-h-48 overflow-y-auto">
-                  {requesterResults.map(emp => (
-                    <button
-                      key={emp.id}
-                      onClick={() => { setRequesterData(emp); setRequesterSearchInput(`${emp.first_name} ${emp.last_name}`); setRequesterResults([]); }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors"
-                    >
-                      <p className="text-sm font-semibold text-primary">{emp.first_name} {emp.last_name}</p>
-                      <p className="text-[10px] text-gray-400 font-mono italic">{emp.code} • {emp.position || 'Emp.'} • {emp.area_name}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {requesterData && (
+            {requesterData ? (
               <div className="bg-green-50 border border-green-100 p-4 flex justify-between items-center animate-in zoom-in-95 duration-200">
                 <div>
                   <p className="text-sm font-bold text-green-800">{requesterData.first_name} {requesterData.last_name}</p>
                   <p className="text-xs text-green-600 font-mono mt-0.5">{requesterData.code} • {requesterData.position || 'Empleado'} • {requesterData.area_name}</p>
                 </div>
-                <button onClick={() => { setRequesterData(null); setRequesterSearchInput(''); }} className="text-green-600 hover:text-green-800 p-1 bg-green-100/50">
-                  <X size={16} />
-                </button>
+                {isAdmin && (
+                  <button onClick={() => { setRequesterData(null); setRequesterSearchInput(''); }} className="text-green-600 hover:text-green-800 p-1 bg-green-100/50">
+                    <X size={16} />
+                  </button>
+                )}
               </div>
+            ) : (
+              !isAdmin && (
+                <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 p-3">
+                  Tu usuario no tiene un empleado vinculado. Contacta a un administrador para poder crear requisas.
+                </p>
+              )
             )}
           </div>
 

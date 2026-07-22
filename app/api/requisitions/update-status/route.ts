@@ -38,9 +38,14 @@ export async function POST(request: Request) {
       if (totalError) throw totalError;
     }
 
+    const statusUpdate: Record<string, unknown> = { status };
+    if (status === 'ENTREGADA') {
+      statusUpdate.delivered_at = new Date().toISOString();
+    }
+
     const { error } = await supabaseAdmin
       .from('requisitions')
-      .update({ status })
+      .update(statusUpdate)
       .eq('id', requisitionId);
 
     if (error) throw error;

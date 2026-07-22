@@ -99,6 +99,9 @@ export interface Requisition {
   area_name?: string;
   approver_name?: string;
   approver_code?: string;
+  approver_signature_url?: string;
+  approved_at?: string;
+  delivered_at?: string;
   comments?: string;
   created_at?: string;
   updated_at?: string;

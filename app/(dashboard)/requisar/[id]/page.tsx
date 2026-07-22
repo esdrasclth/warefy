@@ -1,12 +1,13 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { ArrowLeft, FileText, Check, X, Printer, Package } from 'lucide-react';
+import { ArrowLeft, FileText, Check, X, Printer, Package, Pencil, Trash2, Save, RotateCcw } from 'lucide-react';
 import { DetailSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useToast } from '@/components/ui/Toast';
 import { use } from 'react'; // Explicit unwrap for params
+import SignaturePad, { type SignaturePadHandle } from '@/components/ui/SignaturePad';
 
 export default function RequisitionDetailsPage(props: { params: Promise<{ id: string }> }) {
   const params = use(props.params);
@@ -18,7 +19,15 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
   const [userProfile, setUserProfile] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [deliveredQuantities, setDeliveredQuantities] = useState<Record<string, number>>({});
-  
+  const [showSignModal, setShowSignModal] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [hasSignature, setHasSignature] = useState(false);
+  const signatureRef = useRef<SignaturePadHandle>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editedQuantities, setEditedQuantities] = useState<Record<string, number>>({});
+  const [deletedItemIds, setDeletedItemIds] = useState<Set<string>>(new Set());
+  const [isSavingEdits, setIsSavingEdits] = useState(false);
+
   const fetchRequisition = async () => {
     setIsLoading(true);
     const { data, error } = await supabase
@@ -77,6 +86,108 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
     }
   }, [isLoading, requisition, searchParams]);
 
+  const submitApproval = async () => {
+    const pad = signatureRef.current;
+    if (!pad || pad.isEmpty()) {
+      toast.error('Debe firmar para autorizar la requisa.');
+      return;
+    }
+    setIsApproving(true);
+    try {
+      const blob = await pad.toBlob();
+      if (!blob) throw new Error('No se pudo capturar la firma.');
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const formData = new FormData();
+      formData.append('requisitionId', reqId);
+      formData.append('signature', blob, 'signature.png');
+
+      const response = await fetch('/api/requisitions/approve', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session?.access_token ?? ''}` },
+        body: formData,
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+
+      toast.success('Requisa autorizada correctamente.');
+      setShowSignModal(false);
+      setHasSignature(false);
+      fetchRequisition();
+    } catch (error: any) {
+      toast.error('Error al autorizar: ' + error.message);
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const startEdit = () => {
+    const initial: Record<string, number> = {};
+    requisition.requisition_items?.forEach((item: any) => {
+      initial[item.id] = item.quantity;
+    });
+    setEditedQuantities(initial);
+    setDeletedItemIds(new Set());
+    setEditMode(true);
+  };
+
+  const cancelEdit = () => {
+    setEditMode(false);
+    setEditedQuantities({});
+    setDeletedItemIds(new Set());
+  };
+
+  const toggleDeleteItem = (itemId: string) => {
+    setDeletedItemIds(prev => {
+      const next = new Set(prev);
+      next.has(itemId) ? next.delete(itemId) : next.add(itemId);
+      return next;
+    });
+  };
+
+  const saveEdits = async () => {
+    const remainingCount = (requisition.requisition_items?.length || 0) - deletedItemIds.size;
+    if (remainingCount < 1) {
+      toast.error('La requisa debe conservar al menos un artículo.');
+      return;
+    }
+    const updates = Object.entries(editedQuantities)
+      .filter(([itemId]) => !deletedItemIds.has(itemId))
+      .map(([itemId, quantity]) => ({ itemId, quantity }));
+
+    if (updates.some(u => !Number.isInteger(u.quantity) || u.quantity < 1)) {
+      toast.error('Las cantidades deben ser enteros mayores o iguales a 1.');
+      return;
+    }
+
+    setIsSavingEdits(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch('/api/requisitions/edit-items', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+        },
+        body: JSON.stringify({
+          requisitionId: reqId,
+          updates,
+          deletions: Array.from(deletedItemIds),
+        }),
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+
+      toast.success('Cambios guardados correctamente.');
+      cancelEdit();
+      fetchRequisition();
+    } catch (error: any) {
+      toast.error('Error al guardar cambios: ' + error.message);
+    } finally {
+      setIsSavingEdits(false);
+    }
+  };
+
   const updateStatus = async (newStatus: 'ENTREGADA' | 'CANCELADA' | 'PENDIENTE') => {
     if (confirm(`¿Estás seguro de marcar esta requisa como ${newStatus}?`)) {
       setIsLoading(true);
@@ -129,18 +240,21 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
   const canApprove = userProfile?.role === 'ADMIN' ||
     (userProfile?.role === 'APROBADOR' && requisition.approver_code === userProfile?.employees?.code);
   
-  const effectiveTotalItems = requisition.requisition_items?.reduce((acc: number, item: any) => {
-    const qty = requisition.status === 'PENDIENTE' 
+  const effectiveQtyOf = (item: any) => {
+    if (editMode) return editedQuantities[item.id] ?? item.quantity;
+    return requisition.status === 'PENDIENTE'
       ? (deliveredQuantities[item.id] ?? item.quantity)
       : (item.delivered_quantity ?? item.quantity);
-    return acc + qty;
+  };
+
+  const effectiveTotalItems = requisition.requisition_items?.reduce((acc: number, item: any) => {
+    if (editMode && deletedItemIds.has(item.id)) return acc;
+    return acc + effectiveQtyOf(item);
   }, 0) || 0;
 
   const effectiveTotalCost = requisition.requisition_items?.reduce((acc: number, item: any) => {
-    const qty = requisition.status === 'PENDIENTE' 
-      ? (deliveredQuantities[item.id] ?? item.quantity)
-      : (item.delivered_quantity ?? item.quantity);
-    return acc + (qty * (item.unit_cost || 0));
+    if (editMode && deletedItemIds.has(item.id)) return acc;
+    return acc + (effectiveQtyOf(item) * (item.unit_cost || 0));
   }, 0) || 0;
 
   const getStatusBadge = (status: string) => {
@@ -204,30 +318,60 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
           )}
 
           {requisition.status === 'PENDIENTE DE APROBACION' && canApprove && (
-            <>
-              <button
-                onClick={() => updateStatus('PENDIENTE')}
-                className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-bold shadow-sm transition-colors"
-                title="Aprobar y enviar a almacén"
-              >
-                <Check size={16} strokeWidth={3} /> Autorizar
-              </button>
-              <button
-                onClick={() => updateStatus('CANCELADA')}
-                className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors"
-                title="Rechazar la requisa"
-              >
-                <X size={16} strokeWidth={3} /> Rechazar
-              </button>
-            </>
+            editMode ? (
+              <>
+                <button
+                  onClick={saveEdits}
+                  disabled={isSavingEdits}
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 text-sm font-bold shadow-sm transition-colors disabled:opacity-50"
+                  title="Guardar cambios en los artículos"
+                >
+                  <Save size={16} strokeWidth={2.5} /> {isSavingEdits ? 'Guardando...' : 'Guardar cambios'}
+                </button>
+                <button
+                  onClick={cancelEdit}
+                  disabled={isSavingEdits}
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors disabled:opacity-50"
+                  title="Descartar los cambios"
+                >
+                  <RotateCcw size={16} /> Descartar
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={startEdit}
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors"
+                  title="Editar cantidades o eliminar artículos"
+                >
+                  <Pencil size={16} /> Editar
+                </button>
+                <button
+                  onClick={() => setShowSignModal(true)}
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-bold shadow-sm transition-colors"
+                  title="Firmar, aprobar y enviar a almacén"
+                >
+                  <Check size={16} strokeWidth={3} /> Autorizar
+                </button>
+                <button
+                  onClick={() => updateStatus('CANCELADA')}
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors"
+                  title="Rechazar la requisa"
+                >
+                  <X size={16} strokeWidth={3} /> Rechazar
+                </button>
+              </>
+            )
           )}
 
-          <button
-            onClick={() => window.print()}
-            className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors"
-          >
-            <Printer size={16} /> Imprimir
-          </button>
+          {!editMode && (
+            <button
+              onClick={() => window.print()}
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors"
+            >
+              <Printer size={16} /> Imprimir
+            </button>
+          )}
         </div>
       </div>
 
@@ -303,18 +447,21 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
                 <th className="px-6 print:px-2 py-4 print:py-2 text-right">{requisition.status === 'PENDIENTE' ? 'A Entregar' : 'Entregado'}</th>
                 <th className="px-6 print:px-2 py-4 print:py-2 text-right">Costo Unit.</th>
                 <th className="px-6 print:px-2 py-4 print:py-2 text-right">Total</th>
+                {editMode && <th className="px-6 py-4 text-center print:hidden">Acción</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {requisition.requisition_items?.map((item: any, idx: number) => {
                 const iData = item.inventory_items;
-                const effectiveQty = requisition.status === 'PENDIENTE' 
+                const isDeleted = editMode && deletedItemIds.has(item.id);
+                const rowQty = effectiveQtyOf(item);
+                const effectiveQty = requisition.status === 'PENDIENTE'
                   ? (deliveredQuantities[item.id] ?? item.quantity)
                   : (item.delivered_quantity ?? item.quantity);
-                const totalItemCost = effectiveQty * (item.unit_cost || 0);
+                const totalItemCost = rowQty * (item.unit_cost || 0);
 
                 return (
-                  <tr key={item.id || idx} className="hover:bg-gray-50/50 transition-colors group">
+                  <tr key={item.id || idx} className={`transition-colors group ${isDeleted ? 'bg-red-50/40 opacity-60 line-through' : 'hover:bg-gray-50/50'}`}>
                     <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs font-mono text-gray-500">{iData?.code || '---'}</td>
                     <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs font-semibold text-primary break-words whitespace-normal leading-tight">{iData?.name || 'Artículo Desconocido'}</td>
                     <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs text-gray-500 text-center">
@@ -326,17 +473,33 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
                       )}
                     </td>
                     <td className="px-6 print:px-2 py-4 print:py-1 text-base print:text-sm font-bold text-gray-400 text-right">
-                      {item.quantity}
-                      {iData?.units_per_package && iData?.package_unit?.name && (() => {
-                        const full = Math.floor(item.quantity / iData.units_per_package);
-                        const rem = item.quantity % iData.units_per_package;
-                        if (full === 0) return null;
-                        return (
-                          <span className="block text-[9px] text-blue-400 font-semibold print:hidden">
-                            {rem === 0 ? `${full} ${iData.package_unit.name}` : `~${full} ${iData.package_unit.name} +${rem}`}
-                          </span>
-                        );
-                      })()}
+                      {editMode ? (
+                        <input
+                          type="number"
+                          min="1"
+                          value={editedQuantities[item.id] ?? item.quantity}
+                          disabled={isDeleted}
+                          onChange={(e) => {
+                            const val = Math.max(1, parseInt(e.target.value) || 1);
+                            setEditedQuantities({ ...editedQuantities, [item.id]: val });
+                          }}
+                          className="w-20 border border-gray-300 px-2 py-1 text-right focus:outline-none focus:border-primary disabled:bg-gray-100 no-underline"
+                        />
+                      ) : (
+                        <>
+                          {item.quantity}
+                          {iData?.units_per_package && iData?.package_unit?.name && (() => {
+                            const full = Math.floor(item.quantity / iData.units_per_package);
+                            const rem = item.quantity % iData.units_per_package;
+                            if (full === 0) return null;
+                            return (
+                              <span className="block text-[9px] text-blue-400 font-semibold print:hidden">
+                                {rem === 0 ? `${full} ${iData.package_unit.name}` : `~${full} ${iData.package_unit.name} +${rem}`}
+                              </span>
+                            );
+                          })()}
+                        </>
+                      )}
                     </td>
                     <td className="px-6 print:px-2 py-4 print:py-1 text-base print:text-sm font-bold text-primary text-right">
                       {requisition.status === 'PENDIENTE' ? (
@@ -369,12 +532,23 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
                     </td>
                     <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs text-gray-400 font-mono text-right">${(item.unit_cost || 0).toFixed(2)}</td>
                     <td className="px-6 print:px-2 py-4 print:py-1 text-sm print:text-xs font-bold text-primary font-mono text-right">${totalItemCost.toFixed(2)}</td>
+                    {editMode && (
+                      <td className="px-6 py-4 text-center print:hidden no-underline">
+                        <button
+                          onClick={() => toggleDeleteItem(item.id)}
+                          className={`p-1.5 transition-colors ${isDeleted ? 'text-blue-500 hover:text-blue-700' : 'text-gray-400 hover:text-red-500'}`}
+                          title={isDeleted ? 'Restaurar artículo' : 'Eliminar artículo'}
+                        >
+                          {isDeleted ? <RotateCcw size={16} /> : <Trash2 size={16} />}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
               {(!requisition.requisition_items || requisition.requisition_items.length === 0) && (
                  <tr>
-                   <td colSpan={7} className="px-6 py-12 text-center text-gray-400 text-sm">
+                   <td colSpan={editMode ? 8 : 7} className="px-6 py-12 text-center text-gray-400 text-sm">
                      La requisa no tiene artículos.
                    </td>
                  </tr>
@@ -387,22 +561,81 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
       {/* Signatures (Visible only on print or specific block) */}
       <div className="hidden print:grid grid-cols-3 gap-6 pt-8 mt-2 px-8">
         <div className="flex flex-col items-center">
+          <div className="h-10 mb-0.5 flex items-end justify-center"></div>
           <div className="w-full border-t border-gray-800"></div>
           <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-gray-800">Solicita</p>
           <p className="text-[7px] text-gray-600 mt-0.5 font-bold">{requisition.requester_name}</p>
+          {requisition.created_at && (
+            <p className="text-[6px] text-gray-500 mt-0.5">{new Date(requisition.created_at).toLocaleString()}</p>
+          )}
         </div>
         <div className="flex flex-col items-center">
+          <div className="h-10 mb-0.5 flex items-end justify-center">
+            {requisition.approver_signature_url && (
+              <img
+                src={requisition.approver_signature_url}
+                alt="Firma del aprobador"
+                className="h-10 object-contain"
+              />
+            )}
+          </div>
           <div className="w-full border-t border-gray-800"></div>
           <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-gray-800">Aprueba</p>
           <p className="text-[7px] text-gray-600 mt-0.5 font-bold">{requisition.approver_name}</p>
+          {requisition.approved_at && (
+            <p className="text-[6px] text-gray-500 mt-0.5">{new Date(requisition.approved_at).toLocaleString()}</p>
+          )}
         </div>
         <div className="flex flex-col items-center">
+          <div className="h-10 mb-0.5 flex items-end justify-center"></div>
           <div className="w-full border-t border-gray-800"></div>
           <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-gray-800">Entrega</p>
           <p className="text-[7px] text-gray-600 mt-0.5 font-bold">Almacén General</p>
+          {requisition.delivered_at && (
+            <p className="text-[6px] text-gray-500 mt-0.5">{new Date(requisition.delivered_at).toLocaleString()}</p>
+          )}
         </div>
       </div>
-      
+
+      {showSignModal && (
+        <div className="print:hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white w-full max-w-md shadow-xl border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="text-lg font-light text-primary">Firma de Autorización</h3>
+              <button
+                onClick={() => { if (!isApproving) { setShowSignModal(false); setHasSignature(false); } }}
+                className="p-1 text-gray-400 hover:text-primary transition-colors"
+                disabled={isApproving}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-500">
+                Firme para autorizar la requisa <span className="font-semibold text-primary">REQ-{String(requisition.consecutive || 0).padStart(6, '0')}</span>. La firma quedará registrada en la impresión.
+              </p>
+              <SignaturePad ref={signatureRef} onChange={setHasSignature} />
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => { setShowSignModal(false); setHasSignature(false); }}
+                  disabled={isApproving}
+                  className="flex-1 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-4 py-2.5 text-sm font-bold transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={submitApproval}
+                  disabled={isApproving || !hasSignature}
+                  className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 text-sm font-bold shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Check size={16} strokeWidth={3} /> {isApproving ? 'Autorizando...' : 'Autorizar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
