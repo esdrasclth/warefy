@@ -293,7 +293,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
           </div>
         </div>
 
-        <div className="flex gap-3 w-full md:w-auto print:hidden">
+        <div className="flex flex-wrap gap-3 w-full md:w-auto print:hidden">
           {requisition.status === 'PENDIENTE' && (
             <>
               {isAdminOrAlmacen && (
@@ -561,7 +561,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
       {/* Signatures (Visible only on print or specific block) */}
       <div className="hidden print:grid grid-cols-3 gap-6 pt-8 mt-2 px-8">
         <div className="flex flex-col items-center">
-          <div className="h-10 mb-0.5 flex items-end justify-center"></div>
+          <div className="h-16 mb-0.5 flex items-end justify-center"></div>
           <div className="w-full border-t border-gray-800"></div>
           <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-gray-800">Solicita</p>
           <p className="text-[7px] text-gray-600 mt-0.5 font-bold">{requisition.requester_name}</p>
@@ -570,12 +570,12 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
           )}
         </div>
         <div className="flex flex-col items-center">
-          <div className="h-10 mb-0.5 flex items-end justify-center">
+          <div className="h-16 mb-0.5 flex items-end justify-center">
             {requisition.approver_signature_url && (
               <img
                 src={requisition.approver_signature_url}
                 alt="Firma del aprobador"
-                className="h-10 object-contain"
+                className="h-16 object-contain"
               />
             )}
           </div>
@@ -587,7 +587,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
           )}
         </div>
         <div className="flex flex-col items-center">
-          <div className="h-10 mb-0.5 flex items-end justify-center"></div>
+          <div className="h-16 mb-0.5 flex items-end justify-center"></div>
           <div className="w-full border-t border-gray-800"></div>
           <p className="mt-1 text-[8px] font-bold uppercase tracking-widest text-gray-800">Entrega</p>
           <p className="text-[7px] text-gray-600 mt-0.5 font-bold">Almacén General</p>
