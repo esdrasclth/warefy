@@ -27,7 +27,7 @@ export default function AppLayout({ children, userProfile }: AppLayoutProps) {
           <Topbar onMenuClick={() => setIsSidebarOpen(true)} userProfile={userProfile} />
         </div>
         
-        <main className="flex-1 overflow-y-auto print:overflow-visible p-4 md:p-6 lg:p-8 print:p-0 bg-background print:bg-white">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible p-4 md:p-6 lg:p-8 print:p-0 bg-background print:bg-white">
           <div className="mx-auto w-full max-w-[1700px] print:max-w-none print:mx-0">
             {children}
           </div>
