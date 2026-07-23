@@ -4,6 +4,7 @@ import { Search, Plus, Edit2, Trash2, Eye, Loader2, FileSpreadsheet, ClipboardLi
 import Pagination from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/Confirm';
+import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Link from 'next/link';
 import ProductFormModal, { ProductData } from '@/components/almacen/ProductFormModal';
@@ -16,8 +17,9 @@ export default function AlmacenPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useUrlFilterState('q', '', { debounceMs: 300 });
+  const [lowStockRaw, setLowStockRaw] = useUrlFilterState('bajo', '');
+  const lowStockOnly = lowStockRaw === '1';
   const [productToEdit, setProductToEdit] = useState<ProductData | null>(null);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -292,7 +294,7 @@ export default function AlmacenPage() {
         <button
           type="button"
           onClick={() => {
-            setLowStockOnly(v => !v);
+            setLowStockRaw(lowStockOnly ? '' : '1');
             setCurrentPage(1);
           }}
           className={`shrink-0 flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold uppercase tracking-widest border transition-colors shadow-sm ${

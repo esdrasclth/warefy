@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/utils/supabase/admin';
+import { getClientIp, checkRateLimit, rateLimitResponse } from '@/utils/rateLimit';
 
 // Verifica que la petición provenga de un usuario autenticado con rol ADMIN.
 // El cliente debe enviar el access token de la sesión en el header Authorization: Bearer <token>.
@@ -8,6 +9,13 @@ export async function requireAdmin(request: Request): Promise<
   | { user: { id: string }; response?: never }
   | { user?: never; response: NextResponse }
 > {
+  // Rate limit por IP: protege todos los endpoints admin contra abuso/fuerza bruta.
+  const ip = getClientIp(request);
+  const { allowed, retryAfter } = await checkRateLimit(`admin:ip:${ip}`, 60, 60);
+  if (!allowed) {
+    return { response: rateLimitResponse(retryAfter) };
+  }
+
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
   const token = authHeader?.replace(/^Bearer\s+/i, '').trim();
 

@@ -4,13 +4,14 @@ import { Search, Plus, MapPin, Users, Loader2, Save, X, BookOpen, Edit2, Trash2,
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/Confirm';
+import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import { supabase } from '@/utils/supabase/client';
 import type { Area, Employee } from '@/types';
 
 export default function EmpleadosPage() {
   const toast = useToast();
   const confirm = useConfirm();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useUrlFilterState('q', '', { debounceMs: 300 });
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [isLoading, setIsLoading] = useState(true);

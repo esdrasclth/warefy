@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, Download, Calendar, FileSpreadsheet, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Pagination from '@/components/ui/Pagination';
 import { supabase } from '@/utils/supabase/client';
@@ -38,7 +39,7 @@ export default function RegistrosPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(0);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useUrlFilterState('q', '', { debounceMs: 300 });
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Date range for Excel export

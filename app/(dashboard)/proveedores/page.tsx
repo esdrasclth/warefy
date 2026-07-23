@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/Confirm';
+import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import { TableSkeleton, CardsSkeleton } from '@/components/ui/TableSkeleton';
 
 interface Supplier {
@@ -26,7 +27,7 @@ export default function ProveedoresPage() {
   const confirm = useConfirm();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useUrlFilterState('q', '', { debounceMs: 300 });
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);

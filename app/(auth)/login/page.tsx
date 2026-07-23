@@ -42,9 +42,24 @@ function LoginPageContent() {
     setIsLoading(true);
     setErrorMsg('');
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      router.replace(await landingRouteForSession(data.user.id));
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || 'Error al iniciar sesión. Verifica tus credenciales.');
+      }
+
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: result.access_token,
+        refresh_token: result.refresh_token,
+      });
+      if (sessionError) throw sessionError;
+
+      router.replace(await landingRouteForSession(result.user_id));
     } catch (error: any) {
       setErrorMsg(error.message || 'Error al iniciar sesión. Verifica tus credenciales.');
     } finally {
@@ -120,24 +135,25 @@ function LoginPageContent() {
       </div>
 
       {/* ── Panel derecho — formulario ── */}
-      <div className="flex w-full lg:w-1/2 flex-col items-center justify-center p-8 sm:p-12 relative bg-white">
+      <div className="flex w-full lg:w-1/2 flex-col relative bg-white">
 
-        {/* Logo mobile (solo en pantallas pequeñas) */}
-        <div className="lg:hidden mb-10">
-          <Image
-            src="/logowarefypage.png"
-            alt="Warefy"
-            width={140}
-            height={42}
-            className="object-contain"
-          />
-        </div>
+        {/* Región del formulario (centrada en el espacio restante) */}
+        <div className="flex flex-1 flex-col items-center justify-center p-8 sm:p-12">
 
         <div className="w-full max-w-sm">
 
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-[26px] font-semibold tracking-tight mb-1" style={{ color: '#00262b' }}>
+          <div className="mb-8 text-center flex flex-col items-center">
+            <Image
+              src="/logowarefypage.png"
+              alt="Warefy"
+              width={150}
+              height={46}
+              className="object-contain mb-5"
+              style={{ filter: 'brightness(0)' }}
+              priority
+            />
+            <h1 className="text-[20px] font-bold uppercase tracking-tight mb-1" style={{ color: '#00262b' }}>
               Bienvenido de vuelta
             </h1>
             <p style={{ color: '#4f6466', fontSize: 14 }}>
@@ -253,9 +269,38 @@ function LoginPageContent() {
             ¿Problemas para acceder? Contacta a tu administrador.
           </p>
         </div>
+        </div>
+
+        {/* Hero mobile — imagen con filtro verde (solo en pantallas pequeñas) */}
+        <div className="lg:hidden relative min-h-[38vh] shrink-0 overflow-hidden" style={{ background: '#00262b' }}>
+          <Image
+            src="/login-bg.webp"
+            alt=""
+            fill
+            className="object-cover opacity-60"
+            priority
+            quality={75}
+          />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(0,38,43,0.55) 0%, rgba(11,54,59,0.45) 100%)' }} />
+          <div className="relative z-10 h-full flex flex-col items-center justify-center text-center gap-6 p-8">
+            <div className="flex flex-col items-center">
+              <div
+                className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full mb-3 text-[11px] font-medium tracking-wide"
+                style={{ background: 'rgba(171,255,174,0.1)', border: '1px solid rgba(171,255,174,0.2)', color: '#abffae' }}
+              >
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#abffae', display: 'inline-block' }} />
+                Sistema de Gestión de Almacén — WMS
+              </div>
+              <h2 className="text-2xl font-semibold text-white leading-tight tracking-tight">
+                Control total de tu<br />
+                <span style={{ color: '#abffae' }}>almacén en tiempo real</span>
+              </h2>
+            </div>
+          </div>
+        </div>
 
         {/* Footer del panel */}
-        <div className="absolute bottom-6 text-center" style={{ fontSize: 11, color: '#d1d5db' }}>
+        <div className="absolute bottom-6 left-0 right-0 text-center" style={{ fontSize: 11, color: '#d1d5db' }}>
           © 2026 Warefy · Desarrollada por{' '}
           <a href="http://brandsofts.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#a1c2c6' }}>
             BrandSofts

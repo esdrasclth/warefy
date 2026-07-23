@@ -4,6 +4,7 @@ import { Plus, Search, X, Save, Loader2, Wrench, Users, AlertTriangle, Undo2, Ar
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
 import { useToast } from '@/components/ui/Toast';
+import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import { TableSkeleton, CardsSkeleton } from '@/components/ui/TableSkeleton';
 import { logAudit } from '@/lib/audit';
 import type { ToolAssignment, ToolAssignmentType, ToolAssignmentStatus } from '@/types';
@@ -67,8 +68,9 @@ export default function AsignacionesPage() {
   const [items, setItems] = useState<AssignableItem[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'TODAS' | ToolAssignmentStatus>('ACTIVA');
+  const [search, setSearch] = useUrlFilterState('q', '', { debounceMs: 300 });
+  const [statusFilterRaw, setStatusFilter] = useUrlFilterState('estado', 'ACTIVA');
+  const statusFilter = statusFilterRaw as 'TODAS' | ToolAssignmentStatus;
 
   // Modal reporte de inventario
   const [isReportOpen, setIsReportOpen] = useState(false);

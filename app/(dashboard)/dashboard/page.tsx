@@ -83,6 +83,10 @@ export default function DashboardPage() {
   const fetchLiveMetrics = useCallback(async (month: Date) => {
     const monthStart = new Date(month.getFullYear(), month.getMonth(), 1).toISOString();
     const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1).toISOString();
+    // Fechas solo-día para filtrar por assigned_date (columna date) de asignaciones.
+    const fmtLocalDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const monthStartDate = fmtLocalDate(new Date(month.getFullYear(), month.getMonth(), 1));
+    const monthEndDate = fmtLocalDate(new Date(month.getFullYear(), month.getMonth() + 1, 1));
 
     const [
       { count: prodCount },
@@ -110,8 +114,8 @@ export default function DashboardPage() {
       supabase.from('tool_assignments')
         .select('unit_cost, area_name')
         .neq('assignment_type', 'CAMBIO_ASIGNACION')
-        .gte('created_at', monthStart)
-        .lt('created_at', monthEnd),
+        .gte('assigned_date', monthStartDate)
+        .lt('assigned_date', monthEndDate),
     ]);
 
     const totalBudget = budgets?.reduce((acc, b) => acc + (Number(b.monthly_budget) || 0), 0) || 0;

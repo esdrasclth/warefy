@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import type { Purchase } from '@/types';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/Confirm';
+import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 
 type PurchaseStatus = 'PENDIENTE' | 'RECIBIDA' | 'CANCELADA';
@@ -14,8 +15,9 @@ type PurchaseStatus = 'PENDIENTE' | 'RECIBIDA' | 'CANCELADA';
 export default function ComprasPage() {
   const toast = useToast();
   const confirm = useConfirm();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'TODAS' | PurchaseStatus>('TODAS');
+  const [searchQuery, setSearchQuery] = useUrlFilterState('q', '', { debounceMs: 300 });
+  const [statusFilterRaw, setStatusFilter] = useUrlFilterState('estado', 'TODAS');
+  const statusFilter = statusFilterRaw as 'TODAS' | PurchaseStatus;
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

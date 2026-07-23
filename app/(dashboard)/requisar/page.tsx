@@ -6,6 +6,7 @@ import { useConfirm } from '@/components/ui/Confirm';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Pagination from '@/components/ui/Pagination';
 import { supabase } from '@/utils/supabase/client';
+import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import Link from 'next/link';
 import type { Requisition, RequisitionItem, RequisitionStatus, UserProfile } from '@/types';
 import SignaturePad, { type SignaturePadHandle } from '@/components/ui/SignaturePad';
@@ -22,10 +23,11 @@ interface AreaMetrics {
 export default function RequisarPage() {
   const toast = useToast();
   const confirm = useConfirm();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'TODAS' | RequisitionStatus>('TODAS');
   const currentMonth = new Date().toISOString().slice(0, 7);
-  const [monthFilter, setMonthFilter] = useState(currentMonth);
+  const [searchQuery, setSearchQuery] = useUrlFilterState('q', '', { debounceMs: 300 });
+  const [statusFilterRaw, setStatusFilter] = useUrlFilterState('estado', 'TODAS');
+  const statusFilter = statusFilterRaw as 'TODAS' | RequisitionStatus;
+  const [monthFilter, setMonthFilter] = useUrlFilterState('mes', currentMonth);
 
   const [requisitions, setRequisitions] = useState<Requisition[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -37,10 +39,12 @@ export default function RequisarPage() {
   const profileRef = useRef<UserProfile | null>(null);
   const pageRef = useRef(0);
   useEffect(() => { pageRef.current = page; }, [page]);
-  const monthRef = useRef(currentMonth);
+  const monthRef = useRef(monthFilter);
   useEffect(() => { monthRef.current = monthFilter; }, [monthFilter]);
-  const statusRef = useRef<'TODAS' | RequisitionStatus>('TODAS');
+  const statusRef = useRef<'TODAS' | RequisitionStatus>(statusFilter);
   useEffect(() => { statusRef.current = statusFilter; }, [statusFilter]);
+  const searchRef = useRef(searchQuery);
+  useEffect(() => { searchRef.current = searchQuery; }, [searchQuery]);
   const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const monthInputRef = useRef<HTMLInputElement>(null);
 
@@ -232,8 +236,8 @@ export default function RequisarPage() {
       setUserProfile(profile);
 
       if (profile) {
-        await fetchAreaMetrics(profile, currentMonth);
-        await fetchRequisitions(profile, { page: 0, search: '', status: 'TODAS', month: currentMonth });
+        await fetchAreaMetrics(profile, monthRef.current);
+        await fetchRequisitions(profile, { page: 0, search: searchRef.current, status: statusRef.current, month: monthRef.current });
       }
     };
 
@@ -247,10 +251,7 @@ export default function RequisarPage() {
         // otros usuarios cambian estatus, y coalesce rafagas de cambios.
         if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
         realtimeTimer.current = setTimeout(() => {
-          setSearchQuery(prev => {
-            fetchRequisitions(profileRef.current!, { page: pageRef.current, search: prev, status: statusRef.current, month: monthRef.current, silent: true });
-            return prev;
-          });
+          fetchRequisitions(profileRef.current!, { page: pageRef.current, search: searchRef.current, status: statusRef.current, month: monthRef.current, silent: true });
         }, 400);
       })
       .subscribe();

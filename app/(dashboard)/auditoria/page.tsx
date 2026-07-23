@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ScrollText, Search, RefreshCw, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import { useToast } from '@/components/ui/Toast';
+import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 
 interface AuditLog {
@@ -39,8 +40,8 @@ export default function AuditoriaPage() {
   const toast = useToast();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [actionFilter, setActionFilter] = useState('');
+  const [search, setSearch] = useUrlFilterState('q', '', { debounceMs: 300 });
+  const [actionFilter, setActionFilter] = useUrlFilterState('accion', '');
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
 
