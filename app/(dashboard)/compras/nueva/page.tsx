@@ -5,6 +5,7 @@ import { ArrowLeft, Save, Loader2, Search, Trash2, X, UserPlus, Building2, Print
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/Confirm';
 import { openPurchaseAuthReport, savePurchaseAuthReportSnapshot } from '@/lib/purchaseAuthReport';
 
 interface InventoryItem {
@@ -58,6 +59,7 @@ export default function NuevaCompraView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
+  const confirm = useConfirm();
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingDraft, setIsLoadingDraft] = useState(false);
 
@@ -413,7 +415,13 @@ export default function NuevaCompraView() {
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();
-                          if (confirm(`¿Estás seguro de que deseas eliminar al proveedor "${s.name}"?`)) {
+                          const ok = await confirm({
+                            title: 'Eliminar proveedor',
+                            message: `¿Estás seguro de que deseas eliminar al proveedor "${s.name}"?`,
+                            confirmText: 'Eliminar',
+                            variant: 'danger',
+                          });
+                          if (ok) {
                             const { error } = await supabase.from('suppliers').delete().eq('id', s.id);
                             if (error) toast.error('Error al eliminar: ' + error.message);
                             else setSupplierResults(supplierResults.filter(sr => sr.id !== s.id));

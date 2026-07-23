@@ -6,6 +6,7 @@ import { DetailSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/Confirm';
 import { notifyPurchaseReceived } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
 import { fetchPurchaseAuthReportData, openPurchaseAuthReport } from '@/lib/purchaseAuthReport';
@@ -14,6 +15,7 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const [purchase, setPurchase] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -81,7 +83,12 @@ export default function DetalleCompraPage({ params }: { params: Promise<{ id: st
   };
 
   const handleReceive = async () => {
-    if (!confirm('¿Deseas registrar la recepción de esta compra? Esto incrementará el stock en el inventario con las cantidades indicadas.')) return;
+    const ok = await confirm({
+      title: 'Registrar recepción',
+      message: '¿Deseas registrar la recepción de esta compra? Esto incrementará el stock en el inventario con las cantidades indicadas.',
+      confirmText: 'Registrar',
+    });
+    if (!ok) return;
 
     try {
       let newTotalCost = 0;

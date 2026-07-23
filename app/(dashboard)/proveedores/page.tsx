@@ -4,6 +4,7 @@ import { Plus, Search, Edit2, Trash2, X, Save, Loader2, Truck, Package, Shopping
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/Confirm';
 import { TableSkeleton, CardsSkeleton } from '@/components/ui/TableSkeleton';
 
 interface Supplier {
@@ -22,6 +23,7 @@ const EMPTY_FORM = { name: '', tax_id: '', email: '', phone: '', address: '' };
 
 export default function ProveedoresPage() {
   const toast = useToast();
+  const confirm = useConfirm();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -101,11 +103,15 @@ export default function ProveedoresPage() {
       toast.error(`No se puede eliminar: ${s.product_count} producto(s) tienen este proveedor asignado.`);
       return;
     }
-    if ((s.purchase_count || 0) > 0) {
-      if (!confirm(`"${s.name}" tiene ${s.purchase_count} OC(s) registradas. ¿Eliminar de todas formas?`)) return;
-    } else {
-      if (!confirm(`¿Eliminar proveedor "${s.name}"?`)) return;
-    }
+    const ok = await confirm({
+      title: 'Eliminar proveedor',
+      message: (s.purchase_count || 0) > 0
+        ? `"${s.name}" tiene ${s.purchase_count} OC(s) registradas. ¿Eliminar de todas formas?`
+        : `¿Eliminar proveedor "${s.name}"?`,
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     const { error } = await supabase.from('suppliers').delete().eq('id', s.id);
     if (error) { toast.error('Error eliminando: ' + error.message); return; }
     toast.success('Proveedor eliminado.');

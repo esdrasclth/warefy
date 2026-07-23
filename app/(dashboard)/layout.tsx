@@ -6,6 +6,7 @@ import { supabase } from '@/utils/supabase/client';
 import { Loader2 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import { ToastProvider } from '@/components/ui/Toast';
+import { ConfirmProvider } from '@/components/ui/Confirm';
 import type { UserProfile } from '@/types';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -124,7 +125,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <ToastProvider>
-      <AppLayout userProfile={profile ?? undefined}>{children}</AppLayout>
+      <ConfirmProvider>
+        <AppLayout userProfile={profile ?? undefined}>{children}</AppLayout>
+      </ConfirmProvider>
     </ToastProvider>
   );
 }

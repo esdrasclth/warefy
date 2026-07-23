@@ -6,12 +6,14 @@ import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import type { Purchase } from '@/types';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/Confirm';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 
 type PurchaseStatus = 'PENDIENTE' | 'RECIBIDA' | 'CANCELADA';
 
 export default function ComprasPage() {
   const toast = useToast();
+  const confirm = useConfirm();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODAS' | PurchaseStatus>('TODAS');
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -63,7 +65,13 @@ export default function ComprasPage() {
   }, []);
 
   const handleDelete = async (id: string) => {
-    if (confirm('¿Estás seguro de eliminar esta compra permanentemente?')) {
+    const ok = await confirm({
+      title: 'Eliminar compra',
+      message: '¿Estás seguro de eliminar esta compra permanentemente?',
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (ok) {
       const { error } = await supabase.from('purchases').delete().eq('id', id);
       if (error) toast.error('Error: ' + error.message);
       else fetchPurchases();
@@ -71,7 +79,12 @@ export default function ComprasPage() {
   };
 
   const handleReceive = async (purchase: Purchase) => {
-    if (!confirm('¿Deseas registrar la recepción de esta compra? Esto incrementará el stock en el inventario.')) return;
+    const ok = await confirm({
+      title: 'Registrar recepción',
+      message: '¿Deseas registrar la recepción de esta compra? Esto incrementará el stock en el inventario.',
+      confirmText: 'Registrar',
+    });
+    if (!ok) return;
 
     try {
       // SECURITY: Operación atómica en BD para evitar inconsistencias de inventario

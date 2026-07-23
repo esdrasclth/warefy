@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Printer, Trash2, Eye, Loader2, Check, X, TrendingUp, ClipboardList, Wallet, Activity, ChevronDown, ChevronRight, Calendar } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/Confirm';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Pagination from '@/components/ui/Pagination';
 import { supabase } from '@/utils/supabase/client';
@@ -20,6 +21,7 @@ interface AreaMetrics {
 
 export default function RequisarPage() {
   const toast = useToast();
+  const confirm = useConfirm();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODAS' | RequisitionStatus>('TODAS');
   const currentMonth = new Date().toISOString().slice(0, 7);
@@ -284,7 +286,13 @@ export default function RequisarPage() {
   }, [monthFilter]);
 
   const handleDelete = async (id: string) => {
-    if (confirm(`¿Estás seguro de eliminar permanentemente la requisa?`)) {
+    const ok = await confirm({
+      title: 'Eliminar requisa',
+      message: '¿Estás seguro de eliminar permanentemente la requisa?',
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (ok) {
       // Optimistic: remover inmediatamente de la UI
       const snapshot = requisitions;
       setRequisitions(prev => prev.filter(r => r.id !== id));
@@ -301,7 +309,12 @@ export default function RequisarPage() {
   };
 
   const updateStatus = async (id: string, newStatus: RequisitionStatus) => {
-    if (confirm(`¿Estás seguro de marcar esta requisa como ${newStatus}?`)) {
+    const ok = await confirm({
+      title: 'Cambiar estado',
+      message: `¿Estás seguro de marcar esta requisa como ${newStatus}?`,
+      confirmText: 'Confirmar',
+    });
+    if (ok) {
       // Optimistic: actualizar estado en UI antes de esperar al servidor
       const snapshot = requisitions;
       setRequisitions(prev => prev.map(r => r.id === id ? { ...r, status: newStatus } : r));
@@ -481,14 +494,11 @@ export default function RequisarPage() {
             className="w-full py-2 bg-transparent text-sm focus:outline-none placeholder-gray-400 text-primary"
           />
           <div className="relative shrink-0 border-l border-gray-100 pl-2 ml-2">
-            <button
-              type="button"
-              onClick={() => monthInputRef.current?.showPicker?.()}
-              title={`Filtrar por mes — ${monthLabel(monthFilter)}`}
-              className={`p-2 transition-colors ${monthFilter && monthFilter !== currentMonth ? 'text-primary' : 'text-gray-400 hover:text-primary'}`}
+            <div
+              className={`p-2 pointer-events-none transition-colors ${monthFilter && monthFilter !== currentMonth ? 'text-primary' : 'text-gray-400'}`}
             >
               <Calendar size={20} strokeWidth={1.5} />
-            </button>
+            </div>
             <input
               ref={monthInputRef}
               type="month"
@@ -496,9 +506,10 @@ export default function RequisarPage() {
               value={monthFilter}
               max={currentMonth}
               onChange={(e) => setMonthFilter(e.target.value)}
-              className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
-              tabIndex={-1}
-              aria-hidden="true"
+              onClick={(e) => e.currentTarget.showPicker?.()}
+              title={`Filtrar por mes — ${monthLabel(monthFilter)}`}
+              aria-label="Filtrar por mes"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
           </div>
         </div>

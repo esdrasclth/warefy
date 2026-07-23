@@ -6,6 +6,7 @@ import { DetailSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/Confirm';
 import { use } from 'react'; // Explicit unwrap for params
 import SignaturePad, { type SignaturePadHandle } from '@/components/ui/SignaturePad';
 
@@ -15,6 +16,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
   const searchParams = useSearchParams();
   
   const toast = useToast();
+  const confirm = useConfirm();
   const [requisition, setRequisition] = useState<any | null>(null);
   const [userProfile, setUserProfile] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -189,7 +191,12 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
   };
 
   const updateStatus = async (newStatus: 'ENTREGADA' | 'CANCELADA' | 'PENDIENTE') => {
-    if (confirm(`¿Estás seguro de marcar esta requisa como ${newStatus}?`)) {
+    const ok = await confirm({
+      title: 'Cambiar estado',
+      message: `¿Estás seguro de marcar esta requisa como ${newStatus}?`,
+      confirmText: 'Confirmar',
+    });
+    if (ok) {
       setIsLoading(true);
       try {
         const response = await fetch('/api/requisitions/update-status', {

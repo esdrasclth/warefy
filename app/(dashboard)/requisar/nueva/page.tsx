@@ -5,6 +5,7 @@ import { ArrowLeft, Save, Loader2, Check, X, Search, Plus, Trash2 } from 'lucide
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/Confirm';
 import { notifyPendingApproval } from '@/lib/notifications';
 
 // Extracted interfaces
@@ -40,6 +41,7 @@ interface Employee {
 export default function NuevaRequisaView() {
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const [isSaving, setIsSaving] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -227,7 +229,12 @@ export default function NuevaRequisaView() {
     const itemsWithoutPrice = selectedItems.filter(item => !item.inventoryItem.price || item.inventoryItem.price === 0);
     if (itemsWithoutPrice.length > 0) {
       const names = itemsWithoutPrice.map(i => i.inventoryItem.name).join('\n• ');
-      const proceed = confirm(`⚠ Advertencia: los siguientes artículos no tienen precio registrado:\n\n• ${names}\n\nEl costo histórico quedará en $0.00, lo que afectará los reportes.\n\n¿Deseas continuar de todas formas?`);
+      const proceed = await confirm({
+        title: 'Artículos sin precio',
+        message: `Los siguientes artículos no tienen precio registrado:\n\n• ${names}\n\nEl costo histórico quedará en $0.00, lo que afectará los reportes.\n\n¿Deseas continuar de todas formas?`,
+        confirmText: 'Continuar',
+        variant: 'danger',
+      });
       if (!proceed) return;
     }
 
@@ -292,7 +299,16 @@ export default function NuevaRequisaView() {
       // Todas las requisas requieren aprobación del aprobador asignado antes de llegar a almacén
       const finalStatus = 'PENDIENTE DE APROBACION';
       if (isOverLimit) {
-        alert(`🚨 ATENCIÓN: Esta requisa excedió los límites establecidos.\n\nMotivos:\n- ${limitReasons.join('\n- ')}\n\nEsta información será visible para el aprobador durante su revisión.`);
+        const proceed = await confirm({
+          title: 'Límites excedidos',
+          message: `Esta requisa excedió los límites establecidos.\n\nMotivos:\n- ${limitReasons.join('\n- ')}\n\nEsta información será visible para el aprobador durante su revisión.`,
+          confirmText: 'Continuar',
+          variant: 'danger',
+        });
+        if (!proceed) {
+          setIsSaving(false);
+          return;
+        }
       }
       // --- END VALIDATION ---
 
@@ -672,10 +688,10 @@ export default function NuevaRequisaView() {
       </div>
 
       {/* Barra fija inferior (solo móvil) */}
-      <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] px-4 py-3 flex items-center justify-between gap-4">
-        <div className="min-w-0">
+      <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200 shadow-[0_-4px_16px_rgba(0,0,0,0.1)] px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex items-center gap-3">
+        <div className="min-w-0 shrink-0">
           <p className="text-[9px] text-gray-400 uppercase tracking-widest">
-            {selectedItems.length} artículo(s)
+            {selectedItems.length} art.
           </p>
           <p className="text-base font-bold text-primary truncate">
             ${selectedItems.reduce((acc, curr) => acc + (curr.quantity * curr.inventoryItem.price), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -683,9 +699,9 @@ export default function NuevaRequisaView() {
         </div>
         <button
           onClick={handleSubmit} disabled={isSaving || selectedItems.length === 0 || !requesterData || !approverData}
-          className="flex items-center justify-center gap-2 bg-primary text-background px-5 py-3 text-xs font-bold uppercase tracking-widest hover:bg-primary-dark transition-all shadow-sm disabled:opacity-50 shrink-0"
+          className="flex-1 flex items-center justify-center gap-2 bg-primary text-background px-5 py-4 text-sm font-extrabold uppercase tracking-widest hover:bg-primary-dark active:scale-[0.99] transition-all shadow-lg ring-2 ring-primary/20 disabled:opacity-40 disabled:ring-0"
         >
-          {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+          {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} strokeWidth={2.5} />}
           Generar Requisa
         </button>
       </div>

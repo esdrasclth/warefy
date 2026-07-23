@@ -3,11 +3,13 @@ import { useState, useEffect } from 'react';
 import { Search, Plus, MapPin, Users, Loader2, Save, X, BookOpen, Edit2, Trash2, Key, Shield, Mail, Lock } from 'lucide-react';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/Confirm';
 import { supabase } from '@/utils/supabase/client';
 import type { Area, Employee } from '@/types';
 
 export default function EmpleadosPage() {
   const toast = useToast();
+  const confirm = useConfirm();
   const [searchQuery, setSearchQuery] = useState('');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -23,6 +25,8 @@ export default function EmpleadosPage() {
   const [accessForm, setAccessForm] = useState({ email: '', password: '', role: 'USER' });
   const [accessMessage, setAccessMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [bannedUsers, setBannedUsers] = useState<Set<string>>(new Set());
+  const [userRoles, setUserRoles] = useState<Record<string, string>>({});
+  const [isSavingRole, setIsSavingRole] = useState(false);
 
   // Form states
   const [newArea, setNewArea] = useState({ name: '', description: '' });
@@ -38,6 +42,7 @@ export default function EmpleadosPage() {
 
     if (userIds.length === 0) {
       setBannedUsers(new Set());
+      setUserRoles({});
       return;
     }
 
@@ -54,6 +59,9 @@ export default function EmpleadosPage() {
       const data = await res.json();
       if (data?.bannedIds) {
         setBannedUsers(new Set(data.bannedIds));
+      }
+      if (data?.roles) {
+        setUserRoles(data.roles);
       }
     } catch (err) {
       console.error('Error fetching banned status:', err);
@@ -174,7 +182,13 @@ export default function EmpleadosPage() {
   };
 
   const handleDeleteEmployee = async (id: string, name: string) => {
-    if (confirm(`¿Estás seguro de eliminar permanentemente a ${name}?`)) {
+    const ok = await confirm({
+      title: 'Eliminar empleado',
+      message: `¿Estás seguro de eliminar permanentemente a ${name}?`,
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (ok) {
       setIsLoading(true);
       const { error } = await supabase.from('employees').delete().eq('id', id);
       if (error) {
@@ -311,10 +325,11 @@ export default function EmpleadosPage() {
                         <button 
                           onClick={() => {
                             setSelectedEmployee(emp);
-                            setAccessForm({ email: '', password: '', role: 'USER' });
+                            const currentRole = emp.user_id ? (userRoles[emp.user_id] || 'USER') : 'USER';
+                            setAccessForm({ email: '', password: '', role: currentRole });
                             setAccessMessage(null);
                             setIsAccessModalOpen(true);
-                          }} 
+                          }}
                           className={`p-1 transition-colors ${
                             !hasAccess
                               ? 'text-gray-400 hover:text-orange-500'
@@ -403,7 +418,13 @@ export default function EmpleadosPage() {
                           ? `¿Reactivar el acceso de ${selectedEmployee.first_name} ${selectedEmployee.last_name}?`
                           : `¿Desactivar el acceso de ${selectedEmployee.first_name} ${selectedEmployee.last_name}? No podrá iniciar sesión.`;
 
-                        if (!confirm(confirmMsg)) return;
+                        const ok = await confirm({
+                          title: isBanned ? 'Reactivar acceso' : 'Desactivar acceso',
+                          message: confirmMsg,
+                          confirmText: isBanned ? 'Reactivar' : 'Desactivar',
+                          variant: isBanned ? 'default' : 'danger',
+                        });
+                        if (!ok) return;
 
                         setIsCreatingAccess(true);
                         setAccessMessage(null);
@@ -495,6 +516,42 @@ export default function EmpleadosPage() {
                     <option value="USER">USUARIO (Solo Requisas)</option>
                   </select>
                 </div>
+
+                {selectedEmployee.user_id && (
+                  <button
+                    onClick={async () => {
+                      setIsSavingRole(true);
+                      setAccessMessage(null);
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        const res = await fetch('/api/admin/update-role', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${session?.access_token ?? ''}`,
+                          },
+                          body: JSON.stringify({
+                            userId: selectedEmployee.user_id,
+                            role: accessForm.role
+                          })
+                        });
+                        const data = await res.json();
+                        if (data.error) throw new Error(data.error);
+
+                        setAccessMessage({ type: 'success', text: 'Rol actualizado correctamente.' });
+                        await fetchData();
+                      } catch (err: any) {
+                        setAccessMessage({ type: 'error', text: err.message });
+                      } finally {
+                        setIsSavingRole(false);
+                      }
+                    }}
+                    disabled={isSavingRole || accessForm.role === (userRoles[selectedEmployee.user_id] || 'USER')}
+                    className="w-full bg-gray-800 text-white py-2.5 text-xs font-bold uppercase tracking-widest hover:bg-gray-900 transition-colors disabled:opacity-40"
+                  >
+                    {isSavingRole ? 'Guardando...' : 'Guardar Rol'}
+                  </button>
+                )}
               </div>
 
               <div className="pt-4 flex gap-3">

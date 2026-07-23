@@ -4,6 +4,7 @@ import { X, Plus, Save, Loader2, Search, ChevronDown } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import ImageUpload from '@/components/inventory/ImageUpload';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/Confirm';
 import { logAudit } from '@/lib/audit';
 
 export interface Category { id: string; name: string; }
@@ -41,6 +42,7 @@ interface ProductFormModalProps {
 
 export default function ProductFormModal({ isOpen, productToEdit, onClose, onSaveSuccess }: ProductFormModalProps) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [categories, setCategories] = useState<Category[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -151,7 +153,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
     if (!newCatName.trim()) return;
     const { data, error } = await supabase.from('categories').insert({ name: newCatName.trim().toUpperCase() }).select().single();
     if (error) {
-      alert('Error creando categoría: ' + error.message);
+      toast.error('Error creando categoría: ' + error.message);
     } else if (data) {
       setCategories(prev => [...prev, data]);
       setFormData(prev => ({ ...prev, category_id: data.id }));
@@ -166,7 +168,13 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
       toast.error(`No se puede eliminar "${cat?.name}": hay ${count} producto(s) usándola.`);
       return;
     }
-    if (!confirm(`¿Eliminar categoría "${cat?.name}"?`)) return;
+    const ok = await confirm({
+      title: 'Eliminar categoría',
+      message: `¿Eliminar categoría "${cat?.name}"?`,
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     const { error } = await supabase.from('categories').delete().eq('id', id);
     if (!error) {
       setCategories(categories.filter(c => c.id !== id));
@@ -180,7 +188,7 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
     if (!newUnitName.trim()) return;
     const { data, error } = await supabase.from('units').insert({ name: newUnitName.trim().toUpperCase() }).select().single();
     if (error) {
-      alert('Error creando unidad: ' + error.message);
+      toast.error('Error creando unidad: ' + error.message);
     } else if (data) {
       setUnits(prev => [...prev, data]);
       setFormData(prev => ({ ...prev, unit_id: data.id }));
@@ -195,7 +203,13 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
       toast.error(`No se puede eliminar "${unit?.name}": hay ${count} producto(s) usándola.`);
       return;
     }
-    if (!confirm(`¿Eliminar unidad "${unit?.name}"?`)) return;
+    const ok = await confirm({
+      title: 'Eliminar unidad',
+      message: `¿Eliminar unidad "${unit?.name}"?`,
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     const { error } = await supabase.from('units').delete().eq('id', id);
     if (!error) {
       setUnits(units.filter(u => u.id !== id));
@@ -296,10 +310,13 @@ export default function ProductFormModal({ isOpen, productToEdit, onClose, onSav
             {productToEdit ? 'Editar Artículo' : 'Nuevo Artículo'}
           </h2>
           <button
-            onClick={() => {
+            onClick={async () => {
               const currentJson = JSON.stringify({ code: formData.code, name: formData.name, category_id: formData.category_id, unit_id: formData.unit_id, quantity: formData.quantity, price: formData.price, status: formData.status });
               const initJson = JSON.stringify(productToEdit ? { code: productToEdit.code, name: productToEdit.name, category_id: productToEdit.category_id, unit_id: productToEdit.unit_id, quantity: productToEdit.quantity, price: productToEdit.price, status: productToEdit.status } : { code: '', name: '', category_id: '', unit_id: '', quantity: 0, price: 0, status: 'ACTIVE' });
-              if (currentJson !== initJson && !confirm('Tienes cambios sin guardar. ¿Cerrar de todas formas?')) return;
+              if (currentJson !== initJson) {
+                const ok = await confirm('Tienes cambios sin guardar. ¿Cerrar de todas formas?');
+                if (!ok) return;
+              }
               onClose();
             }}
             disabled={isSaving}

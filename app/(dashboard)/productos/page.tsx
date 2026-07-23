@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, Trash2, Eye, Loader2, FileSpreadsheet, ClipboardList } from 'lucide-react';
 import Pagination from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/Confirm';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Link from 'next/link';
 import ProductFormModal, { ProductData } from '@/components/almacen/ProductFormModal';
@@ -13,6 +14,7 @@ const ITEMS_PER_PAGE = 50;
 
 export default function AlmacenPage() {
   const toast = useToast();
+  const confirm = useConfirm();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [productToEdit, setProductToEdit] = useState<ProductData | null>(null);
@@ -138,7 +140,13 @@ export default function AlmacenPage() {
       return;
     }
 
-    if (!confirm(`¿Eliminar "${itemName}"? Esta acción no se puede deshacer.`)) return;
+    const ok = await confirm({
+      title: 'Eliminar producto',
+      message: `¿Eliminar "${itemName}"? Esta acción no se puede deshacer.`,
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     const { error } = await supabase.from('inventory_items').delete().eq('id', idToDelete);
     if (error) toast.error('Error eliminando: ' + error.message);
     else fetchItems();
