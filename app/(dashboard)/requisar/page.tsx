@@ -37,6 +37,9 @@ export default function RequisarPage() {
   useEffect(() => { pageRef.current = page; }, [page]);
   const monthRef = useRef(currentMonth);
   useEffect(() => { monthRef.current = monthFilter; }, [monthFilter]);
+  const statusRef = useRef<'TODAS' | RequisitionStatus>('TODAS');
+  useEffect(() => { statusRef.current = statusFilter; }, [statusFilter]);
+  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const monthInputRef = useRef<HTMLInputElement>(null);
 
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -131,10 +134,10 @@ export default function RequisarPage() {
 
   const fetchRequisitions = async (
     profile: UserProfile,
-    opts: { page: number; search: string; status: 'TODAS' | RequisitionStatus; month: string }
+    opts: { page: number; search: string; status: 'TODAS' | RequisitionStatus; month: string; silent?: boolean }
   ) => {
     const offset = opts.page * ITEMS_PER_PAGE;
-    setIsLoading(true);
+    if (!opts.silent) setIsLoading(true);
 
     let query = supabase
       .from('requisitions')
@@ -183,7 +186,7 @@ export default function RequisarPage() {
       console.error('Error fetching requisitions:', error);
     }
 
-    setIsLoading(false);
+    if (!opts.silent) setIsLoading(false);
   };
 
   // Carga inicial: perfil + métricas + primera página
@@ -237,13 +240,23 @@ export default function RequisarPage() {
     const channel = supabase
       .channel('requisitions-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'requisitions' }, () => {
-        if (profileRef.current) {
-          setSearchQuery(prev => { fetchRequisitions(profileRef.current!, { page: pageRef.current, search: prev, status: statusFilter, month: monthRef.current }); return prev; });
-        }
+        if (!profileRef.current) return;
+        // Debounce + refresco silencioso: evita el parpadeo del skeleton cuando
+        // otros usuarios cambian estatus, y coalesce rafagas de cambios.
+        if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+        realtimeTimer.current = setTimeout(() => {
+          setSearchQuery(prev => {
+            fetchRequisitions(profileRef.current!, { page: pageRef.current, search: prev, status: statusRef.current, month: monthRef.current, silent: true });
+            return prev;
+          });
+        }, 400);
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+      supabase.removeChannel(channel);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -262,11 +275,10 @@ export default function RequisarPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
-  // Recalcular métricas de las cards cuando cambia el mes
-  const didMountMetrics = useRef(false);
+  // Recalcular métricas de las cards cuando cambia el mes.
+  // La carga inicial la hace init(); este efecto solo reacciona a cambios de mes.
   useEffect(() => {
     if (!profileRef.current) return;
-    if (!didMountMetrics.current) { didMountMetrics.current = true; return; }
     fetchAreaMetrics(profileRef.current, monthFilter);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monthFilter]);

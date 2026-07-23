@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Package, Wallet, ClipboardList, Activity, ArrowRight, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
 import { CardsSkeleton, TableSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
@@ -66,6 +66,7 @@ export default function DashboardPage() {
   const now = new Date();
   const isCurrentMonth = selectedMonth.getFullYear() === now.getFullYear() && selectedMonth.getMonth() === now.getMonth();
   const navigateMonth = (dir: -1 | 1) => setSelectedMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + dir, 1));
+  const reqRealtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [state, setState] = useState<DashboardState>({
     isLoading: true,
     metrics: { totalProducts: 0, totalInventoryValue: 0, totalBudget: 0, totalRequisitionsMTD: 0, monthlyCost: 0 },
@@ -284,7 +285,11 @@ export default function DashboardPage() {
 
     const channel = supabase
       .channel('dashboard-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'requisitions' }, async () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'requisitions' }, () => {
+        // Debounce: coalesce rafagas de cambios (ej. muchos usuarios cambiando
+        // estatus) en un solo recalculo de las graficas.
+        if (reqRealtimeTimer.current) clearTimeout(reqRealtimeTimer.current);
+        reqRealtimeTimer.current = setTimeout(async () => {
         // Requisition changes affect ALL charts (categories, timeline, products, areas)
         const [liveData, chartData] = await Promise.all([
           fetchLiveMetrics(selectedMonth),
@@ -371,6 +376,7 @@ export default function DashboardPage() {
             '12m': buildAreaMap(periodCutoffs['12m']),
           },
         }));
+        }, 400);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items' }, async () => {
         const liveData = await fetchLiveMetrics(selectedMonth);
@@ -382,7 +388,10 @@ export default function DashboardPage() {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (reqRealtimeTimer.current) clearTimeout(reqRealtimeTimer.current);
+      supabase.removeChannel(channel);
+    };
   }, [selectedMonth, fetchLiveMetrics, fetchChartData]);
 
   const { isLoading, metrics, recentActivity, stockAlerts, timelineChartData, productChartDataByPeriod, categoryChartDataByPeriod, areaChartDataByPeriod, budgetChartData } = state;

@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ShoppingCart, Plus, Search, Trash2, Eye, Loader2, Check, X, FileSpreadsheet, Edit, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import Link from 'next/link';
@@ -17,8 +17,10 @@ export default function ComprasPage() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchPurchases = async () => {
-    setIsLoading(true);
+  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchPurchases = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     const { data, error } = await supabase
       .from('purchases')
       .select(`
@@ -34,7 +36,7 @@ export default function ComprasPage() {
     } else if (data) {
       setPurchases(data);
     }
-    setIsLoading(false);
+    if (!silent) setIsLoading(false);
   };
 
   useEffect(() => {
@@ -46,12 +48,16 @@ export default function ComprasPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'purchases' },
         () => {
-          fetchPurchases();
+          // Refresco silencioso + debounce: evita el parpadeo del skeleton
+          // cuando otros usuarios cambian compras.
+          if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+          realtimeTimer.current = setTimeout(() => fetchPurchases(true), 400);
         }
       )
       .subscribe();
 
     return () => {
+      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
       supabase.removeChannel(channel);
     };
   }, []);
