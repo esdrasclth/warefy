@@ -107,7 +107,7 @@ export default function ActaAsignacionPage() {
         {/* Encabezado */}
         <div className="flex justify-between items-start border-b-2 border-primary pb-4">
           <div>
-            <Image src="/logowarefy.png" alt="Warefy" width={110} height={33} className="object-contain mb-2" />
+            <Image src="/logowarefy.png" alt="Warefy" width={123} height={33} className="object-contain mb-2" />
             <h1 className="text-xl print:text-lg font-bold text-primary tracking-tight uppercase">
               Acta de Entrega y Responsabilidad de Herramienta
             </h1>

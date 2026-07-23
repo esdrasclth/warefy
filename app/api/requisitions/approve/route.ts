@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { r2, R2_BUCKET, R2_PUBLIC_URL } from '@/lib/r2';
 import { supabaseAdmin } from '@/utils/supabase/admin';
+import { notifyRequisitionRequester } from '@/lib/serverNotifications';
 
 const MAX_SIZE = 1 * 1024 * 1024; // 1MB
 
@@ -95,6 +96,8 @@ export async function POST(request: Request) {
       .eq('id', requisitionId);
 
     if (updateError) throw updateError;
+
+    await notifyRequisitionRequester(requisitionId, 'approved');
 
     return NextResponse.json({ success: true, signatureUrl });
   } catch (error: unknown) {

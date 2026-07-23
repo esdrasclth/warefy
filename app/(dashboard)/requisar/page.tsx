@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Printer, Trash2, Eye, Loader2, Check, X, TrendingUp, ClipboardList, Wallet, Activity, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Search, Printer, Trash2, Eye, Loader2, Check, X, TrendingUp, ClipboardList, Wallet, Activity, ChevronDown, ChevronRight, Calendar } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Pagination from '@/components/ui/Pagination';
@@ -22,6 +22,8 @@ export default function RequisarPage() {
   const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODAS' | RequisitionStatus>('TODAS');
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const [monthFilter, setMonthFilter] = useState(currentMonth);
 
   const [requisitions, setRequisitions] = useState<Requisition[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -33,6 +35,9 @@ export default function RequisarPage() {
   const profileRef = useRef<UserProfile | null>(null);
   const pageRef = useRef(0);
   useEffect(() => { pageRef.current = page; }, [page]);
+  const monthRef = useRef(currentMonth);
+  useEffect(() => { monthRef.current = monthFilter; }, [monthFilter]);
+  const monthInputRef = useRef<HTMLInputElement>(null);
 
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
@@ -48,6 +53,12 @@ export default function RequisarPage() {
   });
 
   // Área principal + áreas supervisadas (gerentes). Vacío para ADMIN (ve todo).
+  const monthLabel = (m: string) => {
+    if (!m) return 'Todos los meses';
+    const [y, mm] = m.split('-').map(Number);
+    return new Date(y, mm - 1, 1).toLocaleDateString('es-HN', { month: 'long', year: 'numeric' });
+  };
+
   const getAreaIds = (profile: UserProfile): string[] => {
     const ids = new Set<string>();
     if (profile.employees?.area_id) ids.add(profile.employees.area_id);
@@ -55,21 +66,29 @@ export default function RequisarPage() {
     return Array.from(ids);
   };
 
-  const fetchAreaMetrics = async (profile: UserProfile) => {
-    const startOfMonth = new Date(
-      new Date().getFullYear(), new Date().getMonth(), 1
-    ).toISOString();
+  const fetchAreaMetrics = async (profile: UserProfile, month: string) => {
+    const [my, mm] = (month || currentMonth).split('-').map(Number);
+    const startOfMonth = new Date(my, mm - 1, 1).toISOString();
+    const endOfMonth = new Date(my, mm, 1).toISOString();
 
     const isAdmin = profile.role === 'ADMIN';
+    const isUser = profile.role === 'USER';
     const areaIds = getAreaIds(profile);
-    const scoped = !isAdmin && areaIds.length > 0;
+    const scopedByArea = !isAdmin && !isUser && areaIds.length > 0;
+
+    const scope = <T extends { in: (c: string, v: string[]) => T; eq: (c: string, v: string) => T }>(q: T): T => {
+      if (isUser) return q.eq('requester_code', profile.employees?.code ?? '__none__');
+      if (scopedByArea) return q.in('area_id', areaIds);
+      return q;
+    };
 
     let consumoQuery = supabase
       .from('requisitions')
       .select('total_cost')
       .neq('status', 'CANCELADA')
-      .gte('created_at', startOfMonth);
-    if (scoped) consumoQuery = consumoQuery.in('area_id', areaIds);
+      .gte('created_at', startOfMonth)
+      .lt('created_at', endOfMonth);
+    consumoQuery = scope(consumoQuery);
     const { data: consumoData } = await consumoQuery;
     const consumoMes = consumoData?.reduce(
       (acc, r) => acc + (Number(r.total_cost) || 0), 0
@@ -78,12 +97,13 @@ export default function RequisarPage() {
     let countQuery = supabase
       .from('requisitions')
       .select('id', { count: 'exact', head: true })
-      .gte('created_at', startOfMonth);
-    if (scoped) countQuery = countQuery.in('area_id', areaIds);
+      .gte('created_at', startOfMonth)
+      .lt('created_at', endOfMonth);
+    countQuery = scope(countQuery);
     const { count: requisasMes } = await countQuery;
 
     let presupuestoAsignado: number | null = null;
-    if (scoped) {
+    if (!isAdmin && areaIds.length > 0) {
       const { data: budgetData } = await supabase
         .from('area_budgets')
         .select('monthly_budget')
@@ -111,7 +131,7 @@ export default function RequisarPage() {
 
   const fetchRequisitions = async (
     profile: UserProfile,
-    opts: { page: number; search: string; status: 'TODAS' | RequisitionStatus }
+    opts: { page: number; search: string; status: 'TODAS' | RequisitionStatus; month: string }
   ) => {
     const offset = opts.page * ITEMS_PER_PAGE;
     setIsLoading(true);
@@ -124,22 +144,32 @@ export default function RequisarPage() {
       `, { count: 'exact' });
 
     if (profile.role === 'USER') {
+      query = query.eq('requester_code', profile.employees?.code ?? '__none__');
+    } else if (profile.role === 'APROBADOR') {
       const areaIds = getAreaIds(profile);
       if (areaIds.length > 0) query = query.in('area_id', areaIds);
-    }
-
-    if (profile.role === 'APROBADOR' && profile.employees?.code) {
-      query = query.eq('approver_code', profile.employees.code);
     }
 
     if (opts.status !== 'TODAS') {
       query = query.eq('status', opts.status);
     }
 
+    if (opts.month) {
+      const [y, m] = opts.month.split('-').map(Number);
+      const start = new Date(y, m - 1, 1).toISOString();
+      const end = new Date(y, m, 1).toISOString();
+      query = query.gte('created_at', start).lt('created_at', end);
+    }
+
     if (opts.search.trim()) {
-      query = query.or(
-        `id.ilike.%${opts.search}%,area_name.ilike.%${opts.search}%,requester_name.ilike.%${opts.search}%`
-      );
+      const term = opts.search.trim();
+      const conditions = [
+        `area_name.ilike.%${term}%`,
+        `requester_name.ilike.%${term}%`,
+      ];
+      const digits = term.replace(/\D/g, '');
+      if (digits) conditions.push(`consecutive.eq.${Number(digits)}`);
+      query = query.or(conditions.join(','));
     }
 
     const { data, error, count } = await query
@@ -197,8 +227,8 @@ export default function RequisarPage() {
       setUserProfile(profile);
 
       if (profile) {
-        await fetchAreaMetrics(profile);
-        await fetchRequisitions(profile, { page: 0, search: '', status: 'TODAS' });
+        await fetchAreaMetrics(profile, currentMonth);
+        await fetchRequisitions(profile, { page: 0, search: '', status: 'TODAS', month: currentMonth });
       }
     };
 
@@ -208,7 +238,7 @@ export default function RequisarPage() {
       .channel('requisitions-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'requisitions' }, () => {
         if (profileRef.current) {
-          setSearchQuery(prev => { fetchRequisitions(profileRef.current!, { page: pageRef.current, search: prev, status: statusFilter }); return prev; });
+          setSearchQuery(prev => { fetchRequisitions(profileRef.current!, { page: pageRef.current, search: prev, status: statusFilter, month: monthRef.current }); return prev; });
         }
       })
       .subscribe();
@@ -221,16 +251,25 @@ export default function RequisarPage() {
   useEffect(() => {
     if (!profileRef.current) return;
     setPage(0);
-    fetchRequisitions(profileRef.current, { page: 0, search: searchQuery, status: statusFilter });
+    fetchRequisitions(profileRef.current, { page: 0, search: searchQuery, status: statusFilter, month: monthFilter });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, statusFilter]);
+  }, [searchQuery, statusFilter, monthFilter]);
 
   // Re-fetch cuando cambia la página
   useEffect(() => {
     if (!profileRef.current) return;
-    fetchRequisitions(profileRef.current, { page, search: searchQuery, status: statusFilter });
+    fetchRequisitions(profileRef.current, { page, search: searchQuery, status: statusFilter, month: monthFilter });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
+
+  // Recalcular métricas de las cards cuando cambia el mes
+  const didMountMetrics = useRef(false);
+  useEffect(() => {
+    if (!profileRef.current) return;
+    if (!didMountMetrics.current) { didMountMetrics.current = true; return; }
+    fetchAreaMetrics(profileRef.current, monthFilter);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthFilter]);
 
   const handleDelete = async (id: string) => {
     if (confirm(`¿Estás seguro de eliminar permanentemente la requisa?`)) {
@@ -326,13 +365,18 @@ export default function RequisarPage() {
           <h1 className="text-3xl font-light text-primary tracking-tight">Requisas</h1>
           <p className="text-gray-500 mt-2 text-sm">Creación y seguimiento de solicitudes de material.</p>
         </div>
-        <Link
-          href="/requisar/nueva"
-          className="flex items-center justify-center gap-2 bg-primary text-background px-5 h-11 sm:h-10 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent w-full sm:w-auto"
-        >
-          <Plus size={18} strokeWidth={2.5} />
-          Nueva Requisa
-        </Link>
+        <div className="w-full sm:w-auto flex flex-col items-stretch sm:items-end gap-1">
+          <Link
+            href="/requisar/nueva"
+            className="flex items-center justify-center gap-2 bg-primary text-background px-5 h-11 sm:h-10 text-sm font-semibold hover:bg-primary-dark transition-all shadow-sm border border-transparent w-full sm:w-auto"
+          >
+            <Plus size={18} strokeWidth={2.5} />
+            Nueva Requisa
+          </Link>
+          <p className="text-[11px] text-gray-400 text-center sm:text-right capitalize">
+            Mostrando: {monthLabel(monthFilter)}
+          </p>
+        </div>
       </div>
 
       {/* Métricas del Área */}
@@ -418,11 +462,33 @@ export default function RequisarPage() {
           </div>
           <input
             type="text"
+            name="search-requisitions"
             placeholder="Buscar por código, área o solicitante..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full py-2 bg-transparent text-sm focus:outline-none placeholder-gray-400 text-primary"
           />
+          <div className="relative shrink-0 border-l border-gray-100 pl-2 ml-2">
+            <button
+              type="button"
+              onClick={() => monthInputRef.current?.showPicker?.()}
+              title={`Filtrar por mes — ${monthLabel(monthFilter)}`}
+              className={`p-2 transition-colors ${monthFilter && monthFilter !== currentMonth ? 'text-primary' : 'text-gray-400 hover:text-primary'}`}
+            >
+              <Calendar size={20} strokeWidth={1.5} />
+            </button>
+            <input
+              ref={monthInputRef}
+              type="month"
+              name="month-filter"
+              value={monthFilter}
+              max={currentMonth}
+              onChange={(e) => setMonthFilter(e.target.value)}
+              className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
+              tabIndex={-1}
+              aria-hidden="true"
+            />
+          </div>
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">

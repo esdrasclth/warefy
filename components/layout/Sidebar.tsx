@@ -45,7 +45,7 @@ export default function Sidebar({ isOpen, setIsOpen, userRole }: SidebarProps) {
         {/* Logo */}
         <div className="flex h-16 items-center justify-between px-6 border-b border-ash-cloud/40">
           <div className="flex items-center">
-            <Image src="/logowarefy.png" alt="Warefy" width={120} height={36} className="object-contain" priority />
+            <Image src="/logowarefy.png" alt="Warefy" width={134} height={36} className="object-contain" priority />
           </div>
           <button onClick={() => setIsOpen(false)} className="md:hidden text-stone-whisper hover:text-midnight-ink transition-colors">
             <X size={20} />

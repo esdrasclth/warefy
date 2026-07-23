@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/utils/supabase/admin';
+import { notifyRequisitionRequester } from '@/lib/serverNotifications';
 
 export async function POST(request: Request) {
   try {
@@ -49,6 +50,12 @@ export async function POST(request: Request) {
       .eq('id', requisitionId);
 
     if (error) throw error;
+
+    if (status === 'ENTREGADA') {
+      await notifyRequisitionRequester(requisitionId, 'delivered');
+    } else if (status === 'CANCELADA') {
+      await notifyRequisitionRequester(requisitionId, 'cancelled');
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

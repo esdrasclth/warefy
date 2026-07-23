@@ -476,6 +476,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
                       {editMode ? (
                         <input
                           type="number"
+                          name={`edit-qty-${item.id}`}
                           min="1"
                           value={editedQuantities[item.id] ?? item.quantity}
                           disabled={isDeleted}
@@ -506,6 +507,7 @@ export default function RequisitionDetailsPage(props: { params: Promise<{ id: st
                         <>
                           <input
                             type="number"
+                            name={`deliver-qty-${item.id}`}
                             min="0"
                             value={effectiveQty}
                             onChange={(e) => {

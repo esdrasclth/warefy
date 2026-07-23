@@ -390,6 +390,7 @@ export default function NuevaRequisaView() {
                   </div>
                   <input
                     type="text"
+                    name="requester-search"
                     placeholder="Escribe Nombre o Código de Empleado..."
                     value={requesterSearchInput}
                     onChange={e => setRequesterSearchInput(e.target.value)}
@@ -453,9 +454,10 @@ export default function NuevaRequisaView() {
                 <div className="pl-3 pr-2 text-gray-400">
                   <Search size={18} />
                 </div>
-                <input 
-                  type="text" 
-                  placeholder="Escribe Nombre o Código de Supervisor..." 
+                <input
+                  type="text"
+                  name="approver-search"
+                  placeholder="Escribe Nombre o Código de Supervisor..."
                   value={approverSearchInput}
                   onChange={e => setApproverSearchInput(e.target.value)}
                   disabled={!!approverData}
@@ -503,7 +505,8 @@ export default function NuevaRequisaView() {
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-3 mb-4">
               3. Comentarios y Justificación
             </h3>
-            <textarea 
+            <textarea
+              name="comments"
               placeholder="Agregue aquí cualquier nota o justificación adicional para esta requisa..."
               value={comments}
               onChange={e => setComments(e.target.value)}
@@ -521,9 +524,10 @@ export default function NuevaRequisaView() {
           
           <div className="relative mb-6">
             <div className="flex gap-3">
-              <input 
-                type="text" 
-                placeholder="Buscar por Nombre o escanear Código..." 
+              <input
+                type="text"
+                name="item-search"
+                placeholder="Buscar por Nombre o escanear Código..."
                 value={itemCodeInput}
                 onChange={e => setItemCodeInput(e.target.value)}
                 onKeyDown={handleKeyDownItemInput}
@@ -606,6 +610,7 @@ export default function NuevaRequisaView() {
                          </span>
                          <input
                            type="number"
+                           name={`qty-${item.inventoryItem.id}`}
                            min="1"
                            max={availableStock}
                            value={item.quantity || ""}
