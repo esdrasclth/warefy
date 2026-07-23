@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, Eye, Loader2, FileSpreadsheet, ClipboardList } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Eye, Loader2, FileSpreadsheet, ClipboardList, AlertTriangle } from 'lucide-react';
 import Pagination from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/Confirm';
@@ -17,6 +17,7 @@ export default function AlmacenPage() {
   const confirm = useConfirm();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [lowStockOnly, setLowStockOnly] = useState(false);
   const [productToEdit, setProductToEdit] = useState<ProductData | null>(null);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -171,6 +172,7 @@ export default function AlmacenPage() {
       min_order_qty: product.min_order_qty ?? 1,
       package_unit_id: (product as any).package_unit_id ?? null,
       units_per_package: product.units_per_package ?? null,
+      is_assignable: product.is_assignable ?? false,
     });
     setIsModalOpen(true);
   };
@@ -218,14 +220,21 @@ export default function AlmacenPage() {
     XLSX.writeFile(workbook, `Inventario_Warefy_${date}.xlsx`);
   };
 
+  const isBelowMin = (item: InventoryItem) => {
+    const available = (item.quantity || 0) - (item.committed_quantity || 0);
+    return available <= (item.min_stock || 0);
+  };
+  const lowStockCount = items.filter(isBelowMin).length;
+
   const filteredItems = items.filter(item => {
     const query = searchQuery.toLowerCase();
     const catName = item.categories?.name || '';
-    return (
+    const matchesSearch = (
       item.name.toLowerCase().includes(query) ||
       item.code.toLowerCase().includes(query) ||
       catName.toLowerCase().includes(query)
     );
+    return matchesSearch && (!lowStockOnly || isBelowMin(item));
   });
 
   const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE);
@@ -264,20 +273,42 @@ export default function AlmacenPage() {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-100 shadow-sm p-3 flex items-center group focus-within:border-gray-300 transition-colors">
-        <div className="pl-4 pr-3 flex items-center pointer-events-none">
-          <Search className="text-gray-400 group-focus-within:text-primary transition-colors" size={20} strokeWidth={1.5} />
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex-1 bg-white border border-gray-100 shadow-sm p-3 flex items-center group focus-within:border-gray-300 transition-colors">
+          <div className="pl-4 pr-3 flex items-center pointer-events-none">
+            <Search className="text-gray-400 group-focus-within:text-primary transition-colors" size={20} strokeWidth={1.5} />
+          </div>
+          <input
+            type="text"
+            placeholder="Buscar por código, nombre o categoría..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full py-2 bg-transparent text-sm focus:outline-none placeholder-gray-400 text-primary"
+          />
         </div>
-        <input
-          type="text"
-          placeholder="Buscar por código, nombre o categoría..."
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
+        <button
+          type="button"
+          onClick={() => {
+            setLowStockOnly(v => !v);
             setCurrentPage(1);
           }}
-          className="w-full py-2 bg-transparent text-sm focus:outline-none placeholder-gray-400 text-primary"
-        />
+          className={`shrink-0 flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold uppercase tracking-widest border transition-colors shadow-sm ${
+            lowStockOnly
+              ? 'bg-red-50 border-red-200 text-red-600'
+              : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-primary'
+          }`}
+        >
+          <AlertTriangle size={16} />
+          Bajo mínimo
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] leading-none ${
+            lowStockOnly ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600'
+          }`}>
+            {lowStockCount}
+          </span>
+        </button>
       </div>
 
       <div className="bg-white border border-gray-100 shadow-sm overflow-hidden relative min-h-[400px]">
