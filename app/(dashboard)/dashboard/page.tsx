@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Package, Wallet, ClipboardList, Activity, ArrowRight, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
 import { CardsSkeleton, TableSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
+import { fetchAllRows } from '@/utils/supabase/fetchAll';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
 import type { InventoryItem, Requisition } from '@/types';
@@ -92,7 +93,7 @@ export default function DashboardPage() {
       { count: prodCount },
       { data: budgets },
       { count: reqCount },
-      { data: deliveredItems },
+      deliveredItemsRes,
       { data: recentReqs },
       { data: stockItems },
       { data: areasWithBudgets },
@@ -101,12 +102,18 @@ export default function DashboardPage() {
       supabase.from('inventory_items').select('id', { count: 'exact', head: true }).eq('status', 'ACTIVE'),
       supabase.from('area_budgets').select('monthly_budget'),
       supabase.from('requisitions').select('id', { count: 'exact', head: true }).gte('created_at', monthStart).lt('created_at', monthEnd),
-      // Only ENTREGADA, using delivered_quantity for accurate cost
-      supabase.from('requisition_items')
-        .select('quantity, delivered_quantity, unit_cost, requisitions!inner(area_name, status, created_at)')
-        .eq('requisitions.status', 'ENTREGADA')
-        .gte('requisitions.created_at', monthStart)
-        .lt('requisitions.created_at', monthEnd),
+      // Only ENTREGADA, using delivered_quantity for accurate cost.
+      // Se pagina: un mes activo ya ronda las 900 filas y PostgREST corta en
+      // 1000, lo que haria subreportar el consumo del mes sin previo aviso.
+      fetchAllRows((from, to) =>
+        supabase.from('requisition_items')
+          .select('quantity, delivered_quantity, unit_cost, requisitions!inner(area_name, status, created_at)')
+          .eq('requisitions.status', 'ENTREGADA')
+          .gte('requisitions.created_at', monthStart)
+          .lt('requisitions.created_at', monthEnd)
+          .order('id', { ascending: true })
+          .range(from, to)
+      ),
       supabase.from('requisitions').select('id, consecutive, created_at, status, area_name').gte('created_at', monthStart).lt('created_at', monthEnd).order('created_at', { ascending: false }).limit(5),
       supabase.from('inventory_items').select('id, name, code, quantity, committed_quantity, min_stock, max_stock, price, status').eq('status', 'ACTIVE'),
       supabase.from('area_budgets').select('monthly_budget, areas(name)'),
@@ -117,6 +124,8 @@ export default function DashboardPage() {
         .gte('assigned_date', monthStartDate)
         .lt('assigned_date', monthEndDate),
     ]);
+
+    const deliveredItems = deliveredItemsRes.rows;
 
     const totalBudget = budgets?.reduce((acc, b) => acc + (Number(b.monthly_budget) || 0), 0) || 0;
     const totalInventoryValue = stockItems?.reduce((acc, i) => acc + ((i.quantity || 0) * (i.price || 0)), 0) || 0;

@@ -6,6 +6,7 @@ import { useConfirm } from '@/components/ui/Confirm';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Pagination from '@/components/ui/Pagination';
 import { supabase } from '@/utils/supabase/client';
+import { fetchAllRows } from '@/utils/supabase/fetchAll';
 import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import Link from 'next/link';
 import type { Requisition, RequisitionItem, RequisitionStatus, UserProfile } from '@/types';
@@ -91,17 +92,20 @@ export default function RequisarPage() {
       return q;
     };
 
-    let consumoQuery = supabase
-      .from('requisitions')
-      .select('total_cost')
-      .neq('status', 'CANCELADA')
-      .gte('created_at', startOfMonth)
-      .lt('created_at', endOfMonth);
-    consumoQuery = scope(consumoQuery);
-    const { data: consumoData } = await consumoQuery;
-    const consumoMes = consumoData?.reduce(
+    // El consumo del mes se suma en el cliente, asi que necesita TODAS las filas:
+    // sin paginar, PostgREST cortaria en 1000 y el total saldria por debajo.
+    const { rows: consumoData } = await fetchAllRows((from, to) => {
+      const q = supabase
+        .from('requisitions')
+        .select('total_cost')
+        .neq('status', 'CANCELADA')
+        .gte('created_at', startOfMonth)
+        .lt('created_at', endOfMonth);
+      return scope(q).order('id', { ascending: true }).range(from, to);
+    });
+    const consumoMes = consumoData.reduce(
       (acc, r) => acc + (Number(r.total_cost) || 0), 0
-    ) || 0;
+    );
 
     let countQuery = supabase
       .from('requisitions')

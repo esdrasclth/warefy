@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Edit2, Trash2, X, Save, Loader2, Truck, Package, ShoppingCart, Building2, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
+import { fetchAllRows } from '@/utils/supabase/fetchAll';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/Confirm';
 import { useUrlFilterState } from '@/utils/useUrlFilterState';
@@ -36,17 +37,31 @@ export default function ProveedoresPage() {
   const fetchSuppliers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [{ data: suppData }, { data: prodCounts }, { data: ocCounts }] = await Promise.all([
+      // Los dos ultimos alimentan contadores por proveedor: necesitan todas las
+      // filas o los conteos salen por debajo al pasar de 1000 registros.
+      const [{ data: suppData }, { rows: prodCounts }, { rows: ocCounts }] = await Promise.all([
         supabase.from('suppliers').select('*').order('name'),
-        supabase.from('inventory_items').select('preferred_supplier_id').not('preferred_supplier_id', 'is', null),
-        supabase.from('purchases').select('supplier_id').not('supplier_id', 'is', null),
+        fetchAllRows((from, to) =>
+          supabase.from('inventory_items')
+            .select('preferred_supplier_id')
+            .not('preferred_supplier_id', 'is', null)
+            .order('id', { ascending: true })
+            .range(from, to)
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from('purchases')
+            .select('supplier_id')
+            .not('supplier_id', 'is', null)
+            .order('id', { ascending: true })
+            .range(from, to)
+        ),
       ]);
 
       const prodMap: Record<string, number> = {};
-      prodCounts?.forEach(r => { if (r.preferred_supplier_id) prodMap[r.preferred_supplier_id] = (prodMap[r.preferred_supplier_id] || 0) + 1; });
+      prodCounts.forEach(r => { if (r.preferred_supplier_id) prodMap[r.preferred_supplier_id] = (prodMap[r.preferred_supplier_id] || 0) + 1; });
 
       const ocMap: Record<string, number> = {};
-      ocCounts?.forEach(r => { if (r.supplier_id) ocMap[r.supplier_id] = (ocMap[r.supplier_id] || 0) + 1; });
+      ocCounts.forEach(r => { if (r.supplier_id) ocMap[r.supplier_id] = (ocMap[r.supplier_id] || 0) + 1; });
 
       setSuppliers((suppData || []).map(s => ({
         ...s,
