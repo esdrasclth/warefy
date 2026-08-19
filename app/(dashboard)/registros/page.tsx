@@ -11,6 +11,31 @@ import type { InventoryItem, Requisition, RequisitionItem } from '@/types';
 
 const PAGE_SIZE = 50;
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Columnas de mes que cubre el rango exportado, en orden.
+ *
+ * Se derivan del rango elegido y no de los datos: asi un mes sin consumo sale
+ * igual (en blanco) en vez de desaparecer del reporte y descuadrar el promedio.
+ */
+function monthsInRange(from: string, to: string): { year: number; month: number }[] {
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  const cols: { year: number; month: number }[] = [];
+
+  let y = start.getFullYear();
+  let m = start.getMonth();
+  while (y < end.getFullYear() || (y === end.getFullYear() && m <= end.getMonth())) {
+    cols.push({ year: y, month: m });
+    m += 1;
+    if (m > 11) { m = 0; y += 1; }
+  }
+  return cols;
+}
+
 interface RegistroRow {
   fecha: string;
   numero_requisa: string;
@@ -244,6 +269,114 @@ export default function RegistrosPage() {
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Registros');
+
+      // ----- Hoja 2: Detalle de Consumo -----
+      // Tabla dinamica producto x mes. El monto por celda es el mismo que la
+      // columna "Total (USD)" de la hoja Registros, asi que el Grand Total de
+      // esta hoja cuadra con la suma de aquella.
+      const monthCols = monthsInRange(dateFrom, dateTo);
+      const years = [...new Set(monthCols.map(c => c.year))].sort((a, b) => a - b);
+
+      // Consumo acumulado por producto y por mes. El mes se toma de created_at
+      // de la requisa en hora local, igual que la columna "Fecha".
+      const byProduct = new Map<string, Map<string, number>>();
+      for (const item of all) {
+        const createdAt = item.requisitions?.created_at;
+        if (!createdAt) continue;
+
+        const d = new Date(createdAt);
+        const bucket = `${d.getFullYear()}-${d.getMonth()}`;
+        const name = item.inventory_items?.name || 'Sin descripción';
+        const monto =
+          (Number(item.delivered_quantity ?? item.quantity) || 0) *
+          (Number(item.unit_cost) || 0);
+
+        let row = byProduct.get(name);
+        if (!row) { row = new Map(); byProduct.set(name, row); }
+        row.set(bucket, (row.get(bucket) || 0) + monto);
+      }
+
+      // Encabezado en dos filas: el año arriba (combinado sobre sus meses) y el
+      // mes debajo, como en el reporte que se enviaba antes.
+      const header1: (string | number | null)[] = ['DESCRIPCION'];
+      const header2: (string | number | null)[] = [''];
+      const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = [];
+
+      let col = 1;
+      for (const y of years) {
+        const yearMonths = monthCols.filter(c => c.year === y);
+
+        header1.push(String(y));
+        for (let i = 1; i < yearMonths.length; i++) header1.push('');
+        if (yearMonths.length > 1) {
+          merges.push({ s: { r: 0, c: col }, e: { r: 0, c: col + yearMonths.length - 1 } });
+        }
+        for (const c of yearMonths) header2.push(MONTH_LABELS[c.month]);
+        col += yearMonths.length;
+
+        header1.push(`${y} Total`, `Promedio ${y}`);
+        header2.push('', '');
+        col += 2;
+      }
+      header1.push('Grand Total');
+      header2.push('');
+
+      // El promedio divide entre los meses del año que caen dentro del rango
+      // exportado, no entre los meses con movimiento: un mes en cero cuenta.
+      const buildRow = (label: string, buckets: Map<string, number>) => {
+        const row: (string | number | null)[] = [label];
+        let grand = 0;
+
+        for (const y of years) {
+          const yearMonths = monthCols.filter(c => c.year === y);
+          let yearTotal = 0;
+
+          for (const c of yearMonths) {
+            const v = buckets.get(`${c.year}-${c.month}`) || 0;
+            row.push(v === 0 ? null : round2(v));
+            yearTotal += v;
+          }
+
+          row.push(round2(yearTotal), round2(yearTotal / yearMonths.length));
+          grand += yearTotal;
+        }
+
+        row.push(round2(grand));
+        return row;
+      };
+
+      const productRows = [...byProduct.keys()]
+        .sort((a, b) => a.localeCompare(b, 'es'))
+        .map(name => buildRow(name, byProduct.get(name)!));
+
+      const totalBuckets = new Map<string, number>();
+      for (const buckets of byProduct.values()) {
+        for (const [k, v] of buckets) totalBuckets.set(k, (totalBuckets.get(k) || 0) + v);
+      }
+
+      const wsConsumo = XLSX.utils.aoa_to_sheet([
+        header1,
+        header2,
+        ...productRows,
+        buildRow('Grand Total', totalBuckets),
+      ]);
+      wsConsumo['!merges'] = merges;
+      wsConsumo['!cols'] = [
+        { wch: 55 },
+        ...header2.slice(1).map(() => ({ wch: 13 })),
+      ];
+
+      // Formato de moneda en las celdas numericas.
+      const range = XLSX.utils.decode_range(wsConsumo['!ref'] || 'A1');
+      for (let r = 2; r <= range.e.r; r++) {
+        for (let c = 1; c <= range.e.c; c++) {
+          const cell = wsConsumo[XLSX.utils.encode_cell({ r, c })];
+          if (cell && cell.t === 'n') cell.z = '"$"#,##0.00';
+        }
+      }
+
+      XLSX.utils.book_append_sheet(wb, wsConsumo, 'Detalle de Consumo');
+
       XLSX.writeFile(wb, `registros_${dateFrom}_${dateTo}.xlsx`);
 
       if (truncated) {
