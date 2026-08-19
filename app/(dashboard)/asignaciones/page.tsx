@@ -7,6 +7,7 @@ import { fetchAllRows } from '@/utils/supabase/fetchAll';
 import { useToast } from '@/components/ui/Toast';
 import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import { TableSkeleton, CardsSkeleton } from '@/components/ui/TableSkeleton';
+import Pagination from '@/components/ui/Pagination';
 import { logAudit } from '@/lib/audit';
 import type { ToolAssignment, ToolAssignmentType, ToolAssignmentStatus } from '@/types';
 
@@ -25,6 +26,19 @@ interface EmployeeOption {
   position?: string | null;
   areas?: { name: string } | null;
 }
+
+const PAGE_SIZE = 50;
+
+// Columnas de la vista enriquecida: expone ta.* mas search_text, y sigue
+// resolviendo los embeds porque deja pasar inventory_item_id y employee_id.
+const SELECT_COLS = `
+  *,
+  inventory_items ( id, code, name, quantity, units!unit_id ( name ) ),
+  employees ( id, code, first_name, last_name, position, areas ( name ) )
+`;
+
+// % y _ son comodines de ilike en PostgREST; hay que escaparlos.
+const escapeLike = (v: string) => v.replace(/%/g, '\\%').replace(/_/g, '\\_');
 
 const TYPE_LABELS: Record<ToolAssignmentType, string> = {
   NUEVA: 'Nueva Asignación',
@@ -65,10 +79,19 @@ const EMPTY_FORM = {
 
 export default function AsignacionesPage() {
   const toast = useToast();
+  // `assignments` es solo la pagina visible; los totales y contadores los
+  // calcula Postgres. `items` y `employees` pasaron a ser resultados de
+  // typeahead en vez de la tabla completa cargada por adelantado.
   const [assignments, setAssignments] = useState<ToolAssignment[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const [stats, setStats] = useState({ active: 0, holders: 0, damaged: 0, lost: 0 });
+  const [reportAreas, setReportAreas] = useState<string[]>([]);
+  const [replaceableCandidates, setReplaceableCandidates] = useState<ToolAssignment[]>([]);
   const [items, setItems] = useState<AssignableItem[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [search, setSearch] = useUrlFilterState('q', '', { debounceMs: 300 });
   const [statusFilterRaw, setStatusFilter] = useUrlFilterState('estado', 'ACTIVA');
   const statusFilter = statusFilterRaw as 'TODAS' | ToolAssignmentStatus;
@@ -104,72 +127,140 @@ export default function AsignacionesPage() {
   const [transferState, setTransferState] = useState<'NUEVO' | 'USADO'>('USADO');
   const [transferNotes, setTransferNotes] = useState('');
 
-  const fetchData = useCallback(async () => {
+  // La busqueda se debouncea aparte: useUrlFilterState solo retrasa el sync de
+  // la URL, el valor que devuelve es inmediato.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search.trim().toLowerCase());
+      setPage(0);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => { setPage(0); }, [statusFilter]);
+
+  const fetchAssignments = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Se pagina con fetchAllRows: PostgREST corta en 1000 filas, lo que dejaba
-      // el listado y las 4 hojas del Excel incompletos, y truncaba los selectores
-      // de producto y empleado. El orden termina en `id` para que los lotes no se
-      // solapen ni salten filas.
-      const [assignRes, itemsRes, empsRes] = await Promise.all([
-        fetchAllRows((from, to) =>
-          supabase
-            .from('tool_assignments')
-            .select(`
-              *,
-              inventory_items ( id, code, name, quantity, units!unit_id ( name ) ),
-              employees ( id, code, first_name, last_name, position, areas ( name ) )
-            `)
-            .order('created_at', { ascending: false })
-            .order('id', { ascending: true })
-            .range(from, to)
-        ),
-        fetchAllRows((from, to) =>
-          supabase
-            .from('inventory_items')
-            .select('id, code, name, quantity')
-            .eq('is_assignable', true)
-            .eq('status', 'ACTIVE')
-            .order('name')
-            .order('id', { ascending: true })
-            .range(from, to)
-        ),
-        fetchAllRows((from, to) =>
-          supabase
-            .from('employees')
-            .select('id, code, first_name, last_name, position, areas ( name )')
-            .order('first_name')
-            .order('id', { ascending: true })
-            .range(from, to)
-        ),
-      ]);
+      let q = supabase
+        .from('tool_assignments_enriched')
+        .select(SELECT_COLS, { count: 'exact' });
 
-      if (assignRes.error) throw assignRes.error;
-      if (itemsRes.error) throw itemsRes.error;
-      if (empsRes.error) throw empsRes.error;
-      setAssignments(assignRes.rows as unknown as ToolAssignment[]);
-      setItems(itemsRes.rows as unknown as AssignableItem[]);
-      setEmployees(empsRes.rows as unknown as EmployeeOption[]);
+      if (statusFilter !== 'TODAS') q = q.eq('status', statusFilter);
+      if (debouncedSearch) q = q.ilike('search_text', `%${escapeLike(debouncedSearch)}%`);
+
+      const { data, error, count } = await q
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+
+      if (error) throw error;
+
+      setAssignments((data || []) as unknown as ToolAssignment[]);
+      setTotalCount(count || 0);
     } catch (err) {
       console.error(err);
       toast.error('Error cargando asignaciones.');
     }
     setIsLoading(false);
+  }, [page, statusFilter, debouncedSearch, toast]);
+
+  useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
+
+  // Contadores globales y áreas del reporte: no dependen de la pagina ni de los
+  // filtros, y se resuelven enteros en Postgres (el de empleados responsables es
+  // un COUNT(DISTINCT), que PostgREST no puede expresar).
+  const fetchAggregates = useCallback(async () => {
+    const [statsRes, areasRes] = await Promise.all([
+      supabase.rpc('get_tool_assignment_stats').single(),
+      supabase.rpc('get_active_assignment_areas'),
+    ]);
+
+    if (statsRes.data) {
+      const d = statsRes.data as { active: number; holders: number; damaged: number; lost: number };
+      setStats({
+        active: Number(d.active) || 0,
+        holders: Number(d.holders) || 0,
+        damaged: Number(d.damaged) || 0,
+        lost: Number(d.lost) || 0,
+      });
+    }
+    if (areasRes.data) {
+      setReportAreas(
+        (areasRes.data as { area_name: string }[])
+          .map(r => r.area_name)
+          .sort((x, y) => x.localeCompare(y, 'es'))
+      );
+    }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchAggregates(); }, [fetchAggregates]);
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([fetchAssignments(), fetchAggregates()]);
+  }, [fetchAssignments, fetchAggregates]);
+
+  // Typeahead de productos asignables: antes se cargaba el catalogo entero por
+  // adelantado solo para filtrarlo en memoria.
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const term = itemSearch.trim();
+      let q = supabase
+        .from('inventory_items')
+        .select('id, code, name, quantity')
+        .eq('is_assignable', true)
+        .eq('status', 'ACTIVE');
+      if (term) q = q.or(`code.ilike.%${escapeLike(term)}%,name.ilike.%${escapeLike(term)}%`);
+      const { data } = await q.order('name').limit(50);
+      if (!cancelled) setItems((data || []) as AssignableItem[]);
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [itemSearch]);
+
+  // Typeahead de empleados. El panel de nueva asignacion y el modal de
+  // transferencia nunca estan abiertos a la vez, asi que comparten la lista.
+  const empTerm = transferTarget ? transferEmpSearch : empSearch;
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const term = empTerm.trim();
+      let q = supabase
+        .from('employees')
+        .select('id, code, first_name, last_name, position, areas ( name )');
+      if (term) {
+        q = q.or(
+          `code.ilike.%${escapeLike(term)}%` +
+          `,first_name.ilike.%${escapeLike(term)}%` +
+          `,last_name.ilike.%${escapeLike(term)}%`
+        );
+      }
+      const { data } = await q.order('first_name').limit(50);
+      if (!cancelled) setEmployees((data || []) as unknown as EmployeeOption[]);
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [empTerm]);
+
+  // Asignaciones activas reemplazables: se consultan solo para el producto
+  // elegido, en vez de tener todas las activas en memoria.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!form.inventory_item_id) { setReplaceableCandidates([]); return; }
+      const { data } = await supabase
+        .from('tool_assignments')
+        .select(SELECT_COLS)
+        .eq('status', 'ACTIVA')
+        .eq('inventory_item_id', form.inventory_item_id)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (!cancelled) setReplaceableCandidates((data || []) as unknown as ToolAssignment[]);
+    })();
+    return () => { cancelled = true; };
+  }, [form.inventory_item_id]);
 
   const empFullName = (e?: EmployeeOption | ToolAssignment['employees'] | null) =>
     e ? `${e.first_name} ${e.last_name}`.trim() : '—';
-
-  const activeAssignments = useMemo(() => assignments.filter(a => a.status === 'ACTIVA'), [assignments]);
-
-  // Áreas con al menos una asignación activa (para el reporte de inventario)
-  const reportAreas = useMemo(() => {
-    const set = new Set<string>();
-    activeAssignments.forEach(a => set.add(a.employees?.areas?.name || 'Sin Área'));
-    return [...set].sort((x, y) => x.localeCompare(y, 'es'));
-  }, [activeAssignments]);
 
   const openReport = () => {
     const areaQuery = reportArea === 'todas' ? 'todas' : encodeURIComponent(reportArea);
@@ -182,11 +273,28 @@ export default function AsignacionesPage() {
   const monthKey = (d?: string | null) => (d ? d.slice(0, 7) : '');
 
   const handleExportExcel = async () => {
-    if (assignments.length === 0) { toast.warning('No hay asignaciones para exportar.'); return; }
     setIsExporting(true);
     try {
+      // El reporte cubre TODAS las asignaciones, no la pagina en pantalla.
+      const { rows, error, truncated } = await fetchAllRows((from, to) =>
+        supabase
+          .from('tool_assignments_enriched')
+          .select(SELECT_COLS)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, to)
+      );
+
+      if (error) { toast.error('Error al exportar: ' + error.message); return; }
+
+      const allAssignments = rows as unknown as ToolAssignment[];
+      if (allAssignments.length === 0) {
+        toast.warning('No hay asignaciones para exportar.');
+        return;
+      }
+
       // Hoja 1: detalle completo (todas las asignaciones, todos los estatus)
-      const detailRows = assignments.map(a => {
+      const detailRows = allAssignments.map(a => {
         const cost = Number(a.unit_cost) || 0;
         return {
           'N° Acta': `AS-${String(a.consecutive ?? 0).padStart(4, '0')}`,
@@ -209,7 +317,7 @@ export default function AsignacionesPage() {
       });
 
       // Hojas de resumen: solo asignaciones activas (valor actualmente entregado)
-      const active = assignments.filter(a => a.status === 'ACTIVA');
+      const active = allAssignments.filter(a => a.status === 'ACTIVA');
 
       const byAreaMap = new Map<string, { count: number; monto: number }>();
       active.forEach(a => {
@@ -236,7 +344,7 @@ export default function AsignacionesPage() {
         .map(v => ({ 'Área': v.area, 'Código Empleado': v.code, 'Empleado': v.name, 'Herramientas Activas': v.count, 'Monto Asignado (USD)': v.monto }));
 
       // Hoja de incidentes: dañadas y extraviadas, con fecha filtrable por mes/área/empleado
-      const incidentRows = assignments
+      const incidentRows = allAssignments
         .filter(a => a.status === 'DANADA' || a.status === 'EXTRAVIADA')
         .sort((x, y) => isoDate(y.return_date).localeCompare(isoDate(x.return_date)))
         .map(a => ({
@@ -284,7 +392,12 @@ export default function AsignacionesPage() {
       XLSX.utils.book_append_sheet(wb, wsIncidents, 'Dañadas y Extraviadas');
 
       XLSX.writeFile(wb, `asignaciones_completo_${today()}.xlsx`);
-      toast.success('Reporte exportado correctamente.');
+
+      if (truncated) {
+        toast.warning('Se alcanzó el máximo de filas exportables; el reporte está incompleto.');
+      } else {
+        toast.success(`${allAssignments.length.toLocaleString()} asignaciones exportadas.`);
+      }
     } catch (e) {
       toast.error('Error al exportar: ' + (e instanceof Error ? e.message : String(e)));
     } finally {
@@ -293,38 +406,14 @@ export default function AsignacionesPage() {
   };
 
   // Asignaciones activas del producto seleccionado (para reemplazos)
-  const replaceableCandidates = useMemo(() => {
-    if (!form.inventory_item_id) return activeAssignments;
-    return activeAssignments.filter(a => a.inventory_item_id === form.inventory_item_id);
-  }, [activeAssignments, form.inventory_item_id]);
+  const statCards = useMemo(() => [
+    { label: 'Asignaciones Activas', value: stats.active, icon: Wrench, bg: 'bg-primary' },
+    { label: 'Empleados Responsables', value: stats.holders, icon: Users, bg: 'bg-blue-600' },
+    { label: 'Dañadas', value: stats.damaged, icon: AlertTriangle, bg: 'bg-orange-500' },
+    { label: 'Extraviadas', value: stats.lost, icon: ShieldAlert, bg: 'bg-red-600' },
+  ], [stats]);
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return assignments.filter(a => {
-      if (statusFilter !== 'TODAS' && a.status !== statusFilter) return false;
-      if (!q) return true;
-      return (
-        (a.inventory_items?.name || '').toLowerCase().includes(q) ||
-        (a.inventory_items?.code || '').toLowerCase().includes(q) ||
-        (a.serial_number || '').toLowerCase().includes(q) ||
-        empFullName(a.employees).toLowerCase().includes(q) ||
-        (a.employees?.code || '').toLowerCase().includes(q)
-      );
-    });
-  }, [assignments, search, statusFilter]);
-
-  const stats = useMemo(() => {
-    const active = activeAssignments.length;
-    const holders = new Set(activeAssignments.map(a => a.employee_id)).size;
-    const damaged = assignments.filter(a => a.status === 'DANADA').length;
-    const lost = assignments.filter(a => a.status === 'EXTRAVIADA').length;
-    return [
-      { label: 'Asignaciones Activas', value: active, icon: Wrench, bg: 'bg-primary' },
-      { label: 'Empleados Responsables', value: holders, icon: Users, bg: 'bg-blue-600' },
-      { label: 'Dañadas', value: damaged, icon: AlertTriangle, bg: 'bg-orange-500' },
-      { label: 'Extraviadas', value: lost, icon: ShieldAlert, bg: 'bg-red-600' },
-    ];
-  }, [assignments, activeAssignments]);
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const openCreate = () => {
     setForm({ ...EMPTY_FORM, assigned_date: today() });
@@ -391,7 +480,7 @@ export default function AsignacionesPage() {
 
       toast.success('Asignación registrada. Generando acta de entrega...');
       setIsPanelOpen(false);
-      fetchData();
+      refreshAll();
       if (created?.id) window.open(`/asignaciones/${created.id}?print=true`, '_blank');
     } catch (err) {
       toast.error('Error guardando la asignación: ' + (err instanceof Error ? err.message : String(err)));
@@ -429,7 +518,7 @@ export default function AsignacionesPage() {
         : `Asignación marcada como ${STATUS_LABELS[returnStatus].toLowerCase()}.`
     );
     setReturnTarget(null);
-    fetchData();
+    refreshAll();
   };
 
   const handleTransferSave = async () => {
@@ -477,7 +566,7 @@ export default function AsignacionesPage() {
 
       toast.success('Cambio de asignación registrado. Generando acta de entrega...');
       setTransferTarget(null);
-      fetchData();
+      refreshAll();
       if (created?.id) window.open(`/asignaciones/${created.id}?print=true`, '_blank');
     } catch (err) {
       toast.error('Error en la transferencia: ' + (err instanceof Error ? err.message : String(err)));
@@ -523,7 +612,7 @@ export default function AsignacionesPage() {
       {/* Stats */}
       {isLoading ? <CardsSkeleton count={4} /> : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((s, i) => {
+          {statCards.map((s, i) => {
             const Icon = s.icon;
             return (
               <div key={i} className="bg-white border border-gray-100 p-5 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
@@ -565,7 +654,7 @@ export default function AsignacionesPage() {
               </button>
             ))}
           </div>
-          <span className="text-xs text-gray-400 whitespace-nowrap sm:ml-auto">{filtered.length} resultado(s)</span>
+          <span className="text-xs text-gray-400 whitespace-nowrap sm:ml-auto">{totalCount.toLocaleString()} resultado(s)</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -586,7 +675,7 @@ export default function AsignacionesPage() {
             <tbody className="divide-y divide-gray-50">
               {isLoading ? (
                 <TableSkeleton rows={8} cols={9} />
-              ) : filtered.length === 0 ? (
+              ) : assignments.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-16 text-center text-sm text-gray-400">
                     <Wrench size={32} className="mx-auto mb-2 text-gray-200" />
@@ -596,7 +685,7 @@ export default function AsignacionesPage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map(a => (
+                assignments.map(a => (
                   <tr key={a.id} className="hover:bg-blue-50/20 transition-colors group border-b border-gray-50">
                     <td className="py-3 px-4 text-xs font-mono text-gray-400">AS-{String(a.consecutive ?? 0).padStart(4, '0')}</td>
                     <td className="py-3 px-4">
@@ -685,6 +774,15 @@ export default function AsignacionesPage() {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          pageSize={PAGE_SIZE}
+          itemLabel="asignaciones"
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Modal: Reporte de Inventario */}
@@ -875,7 +973,7 @@ export default function AsignacionesPage() {
                     <select
                       value={form.previous_assignment_id}
                       onChange={e => {
-                        const prev = activeAssignments.find(a => a.id === e.target.value);
+                        const prev = replaceableCandidates.find(a => a.id === e.target.value);
                         setForm(p => ({
                           ...p,
                           previous_assignment_id: e.target.value,

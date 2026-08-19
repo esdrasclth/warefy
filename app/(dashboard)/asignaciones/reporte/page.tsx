@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowLeft, Printer, Loader2, Wrench } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
+import { fetchAllRows } from '@/utils/supabase/fetchAll';
 import type { ToolAssignment } from '@/types';
 
 const NO_AREA = 'Sin Área';
@@ -17,16 +18,22 @@ export default function ReporteInventarioPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const { data } = await supabase
-        .from('tool_assignments')
-        .select(`
-          *,
-          inventory_items ( code, name, units!unit_id ( name ) ),
-          employees ( code, first_name, last_name, position, areas ( name ) )
-        `)
-        .eq('status', 'ACTIVA')
-        .order('assigned_date', { ascending: true });
-      setAssignments((data || []) as unknown as ToolAssignment[]);
+      // El reporte se imprime completo: se pagina para que PostgREST no lo
+      // corte en 1000 filas y deje herramientas fuera del acta.
+      const { rows } = await fetchAllRows((from, to) =>
+        supabase
+          .from('tool_assignments')
+          .select(`
+            *,
+            inventory_items ( code, name, units!unit_id ( name ) ),
+            employees ( code, first_name, last_name, position, areas ( name ) )
+          `)
+          .eq('status', 'ACTIVA')
+          .order('assigned_date', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)
+      );
+      setAssignments(rows as unknown as ToolAssignment[]);
       setIsLoading(false);
     };
     fetchData();

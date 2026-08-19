@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Plus, Edit2, Trash2, Eye, Loader2, FileSpreadsheet, ClipboardList, AlertTriangle } from 'lucide-react';
 import Pagination from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
@@ -14,6 +14,30 @@ import type { InventoryItem } from '@/types';
 
 const ITEMS_PER_PAGE = 50;
 
+// Columnas de la vista enriquecida. `inventory_items_enriched` expone i.* mas
+// search_text, pending_oc y avg_consumption; los embeds siguen resolviendose
+// porque la vista deja pasar category_id, unit_id y package_unit_id intactos.
+const SELECT_COLS = `
+  *,
+  categories(name),
+  units!unit_id(name),
+  package_unit:units!package_unit_id(name)
+`;
+
+// PostgREST trata % y _ como comodines en ilike; hay que escaparlos para que
+// una busqueda literal no se convierta en un comodin accidental.
+// pending_oc y avg_consumption vienen de agregados numeric. Se normalizan a
+// number para que el JSX pueda hacer .toFixed() sin depender de como serialice
+// PostgREST cada tipo.
+const toItems = (data: unknown): InventoryItem[] =>
+  ((data as Record<string, unknown>[] | null) || []).map((row) => ({
+    ...row,
+    pending_oc: Number(row.pending_oc) || 0,
+    avg_consumption: Number(row.avg_consumption) || 0,
+  })) as unknown as InventoryItem[];
+
+const escapeLike = (v: string) => v.replace(/%/g, '\\%').replace(/_/g, '\\_');
+
 export default function AlmacenPage() {
   const toast = useToast();
   const confirm = useConfirm();
@@ -23,120 +47,96 @@ export default function AlmacenPage() {
   const lowStockOnly = lowStockRaw === '1';
   const [productToEdit, setProductToEdit] = useState<ProductData | null>(null);
 
+  // `items` ahora es SOLO la pagina visible. Los totales los calcula Postgres:
+  // traer el catalogo entero para contar y filtrar en JS era lo que chocaba con
+  // el limite de 1000 filas de PostgREST.
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [lowStockCount, setLowStockCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  const fetchItems = async () => {
+  // La busqueda se debouncea aparte: useUrlFilterState solo retrasa el sync de
+  // la URL, el valor que devuelve es inmediato.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim().toLowerCase());
+      setCurrentPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  // Unico lugar donde viven los filtros, compartido por la consulta de pagina y
+  // la de exportacion, para que el Excel corresponda exactamente a lo que se ve.
+  const buildQuery = useCallback((opts?: { count: 'exact' }) => {
+    let q = supabase.from('inventory_items_enriched').select(SELECT_COLS, opts);
+    if (debouncedSearch) q = q.ilike('search_text', `%${escapeLike(debouncedSearch)}%`);
+    if (lowStockOnly) q = q.eq('is_below_min', true);
+    return q;
+  }, [debouncedSearch, lowStockOnly]);
+
+  const fetchItems = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch Inventory Items
-      // Se pagina con fetchAllRows: sin ella PostgREST devolvia solo las primeras
-      // 1000 filas y el inventario quedaba incompleto en pantalla y en el Excel.
-      // El orden termina en `id` para que los lotes no se solapen ni salten filas.
-      const { rows: invData, error: invError } = await fetchAllRows((from, to) =>
-        supabase
-          .from('inventory_items')
-          .select('*, categories(name), units!unit_id(name), preferred_supplier_id, package_unit:units!package_unit_id(name), units_per_package')
+      const from = (currentPage - 1) * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
+
+      const [pageRes, lowRes] = await Promise.all([
+        buildQuery({ count: 'exact' })
           .order('created_at', { ascending: false })
           .order('id', { ascending: true })
-          .range(from, to)
-      );
-
-      if (invError) throw invError;
-
-      // 2. Fetch PENDING Purchase Items (to calculate OC)
-      const { rows: ocData, error: ocError } = await fetchAllRows((from, to) =>
+          .range(from, to),
+        // El contador del boton "bajo minimo" es global (no lo afecta la
+        // busqueda), asi que va contra la tabla base, que tiene el indice
+        // parcial sobre is_below_min y evita evaluar los agregados de la vista.
         supabase
-          .from('purchase_items')
-          .select('inventory_item_id, quantity, purchases!inner(status)')
-          .eq('purchases.status', 'PENDIENTE')
-          .order('id', { ascending: true })
-          .range(from, to)
-      );
+          .from('inventory_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('is_below_min', true),
+      ]);
 
-      if (ocError) throw ocError;
+      if (pageRes.error) throw pageRes.error;
 
-      // 3. Fetch Requisition Items from last 6 months (to calculate Average Consumption)
-      const sixMonthsAgo = new Date();
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
-      const { rows: reqData, error: reqError } = await fetchAllRows((from, to) =>
-        supabase
-          .from('requisition_items')
-          .select('inventory_item_id, quantity, delivered_quantity, requisitions!inner(status, created_at)')
-          .eq('requisitions.status', 'ENTREGADA')
-          .gte('requisitions.created_at', sixMonthsAgo.toISOString())
-          .order('id', { ascending: true })
-          .range(from, to)
-      );
-
-      if (reqError) throw reqError;
-
-      // Aggregate data
-      const ocMap: Record<string, number> = {};
-      ocData.forEach(item => {
-        ocMap[item.inventory_item_id] = (ocMap[item.inventory_item_id] || 0) + item.quantity;
-      });
-
-      const consumptionMap: Record<string, number> = {};
-      const consumptionMonthsMap: Record<string, Set<string>> = {};
-      reqData.forEach(item => {
-        const qty = (item.delivered_quantity ?? item.quantity) || 0;
-        const req = item.requisitions as unknown as { created_at: string };
-        const monthKey = req.created_at.substring(0, 7);
-        consumptionMap[item.inventory_item_id] = (consumptionMap[item.inventory_item_id] || 0) + qty;
-        if (!consumptionMonthsMap[item.inventory_item_id]) consumptionMonthsMap[item.inventory_item_id] = new Set();
-        consumptionMonthsMap[item.inventory_item_id].add(monthKey);
-      });
-
-      const enrichedItems = invData.map(item => ({
-        ...item,
-        pending_oc: ocMap[item.id] || 0,
-        avg_consumption: consumptionMonthsMap[item.id]
-          ? (consumptionMap[item.id] || 0) / consumptionMonthsMap[item.id].size
-          : 0
-      }));
-
-      setItems(enrichedItems);
+      setItems(toItems(pageRes.data));
+      setTotalCount(pageRes.count || 0);
+      setLowStockCount(lowRes.count || 0);
     } catch (error: unknown) {
       console.error('Error fetching inventory:', error);
       const message = error instanceof Error ? error.message : 'Error inesperado.';
       toast.error('Error cargando datos: ' + message);
     }
     setIsLoading(false);
-  };
+  }, [currentPage, buildQuery, toast]);
 
   useEffect(() => {
     fetchItems();
+  }, [fetchItems]);
+
+  // Con paginacion de servidor ya no sirve parchear filas en memoria: un cambio
+  // puede sacar o meter un articulo en la pagina actual, o mover los totales.
+  // Se refresca la pagina visible con debounce para no recargar en cada evento.
+  const fetchItemsRef = useRef(fetchItems);
+  fetchItemsRef.current = fetchItems;
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
     const channel = supabase
       .channel('almacen-realtime')
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'inventory_items' },
-        (payload) => {
-          // Update item in-place without full refetch
-          setItems(prev => prev.map(item =>
-            item.id === payload.new.id ? { ...item, ...payload.new } : item
-          ));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'inventory_items' },
-        () => { fetchItems(); }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'inventory_items' },
-        (payload) => {
-          setItems(prev => prev.filter(item => item.id !== payload.old.id));
+        { event: '*', schema: 'public', table: 'inventory_items' },
+        () => {
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => fetchItemsRef.current(), 400);
         }
       )
       .subscribe();
 
     return () => {
+      if (timer) clearTimeout(timer);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -201,63 +201,69 @@ export default function AlmacenPage() {
   };
 
   const handleExportExcel = async () => {
-    if (filteredItems.length === 0) {
-      toast.warning('No hay datos para exportar.');
-      return;
+    setIsExporting(true);
+    try {
+      // Mismos filtros que la pantalla, pero trayendo TODAS las coincidencias:
+      // la tabla muestra una pagina, el Excel se espera completo.
+      const { rows, error, truncated } = await fetchAllRows((from, to) =>
+        buildQuery()
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, to)
+      );
+
+      if (error) { toast.error('Error al exportar: ' + error.message); return; }
+
+      const exportItems = toItems(rows);
+      if (exportItems.length === 0) {
+        toast.warning('No hay datos para exportar.');
+        return;
+      }
+
+      const XLSX = await import('xlsx');
+
+      const dataToExport = exportItems.map(item => ({
+        'Código': item.code,
+        'Artículo': item.name,
+        'Categoría': item.categories?.name || 'N/A',
+        'Unidad': item.units?.name || 'UND',
+        'Existencia': item.quantity || 0,
+        'OC Pendiente': item.pending_oc || 0,
+        'Comprometido': item.committed_quantity || 0,
+        'Disponible': (item.quantity || 0) - (item.committed_quantity || 0),
+        'Consumo Prom.': (item.avg_consumption || 0).toFixed(2),
+        'Mínimo': item.min_stock || 0,
+        'Máximo': item.max_stock || 0,
+        'Precio ($)': item.price || 0,
+        'Total ($)': (item.quantity || 0) * (item.price || 0),
+        'Estado': item.status === 'ACTIVE' ? 'ACTIVO' : 'INACTIVO'
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventario');
+      worksheet['!cols'] = [
+        { wch: 10 }, { wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 10 },
+        { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
+        { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }
+      ];
+
+      const date = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(workbook, `Inventario_Warefy_${date}.xlsx`);
+
+      if (truncated) {
+        toast.warning('Se alcanzó el máximo de filas exportables; el archivo está incompleto.');
+      } else {
+        toast.success(`${exportItems.length.toLocaleString()} artículos exportados.`);
+      }
+    } catch (e: unknown) {
+      toast.error('Error al exportar: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setIsExporting(false);
     }
-
-    const XLSX = await import('xlsx');
-
-    const dataToExport = filteredItems.map(item => ({
-      'Código': item.code,
-      'Artículo': item.name,
-      'Categoría': item.categories?.name || 'N/A',
-      'Unidad': item.units?.name || 'UND',
-      'Existencia': item.quantity || 0,
-      'OC Pendiente': item.pending_oc || 0,
-      'Comprometido': item.committed_quantity || 0,
-      'Disponible': (item.quantity || 0) - (item.committed_quantity || 0),
-      'Consumo Prom.': (item.avg_consumption || 0).toFixed(2),
-      'Mínimo': item.min_stock || 0,
-      'Máximo': item.max_stock || 0,
-      'Precio ($)': item.price || 0,
-      'Total ($)': (item.quantity || 0) * (item.price || 0),
-      'Estado': item.status === 'ACTIVE' ? 'ACTIVO' : 'INACTIVO'
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventario');
-    worksheet['!cols'] = [
-      { wch: 10 }, { wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 10 },
-      { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
-      { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }
-    ];
-
-    const date = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(workbook, `Inventario_Warefy_${date}.xlsx`);
   };
 
-  const isBelowMin = (item: InventoryItem) => {
-    const available = (item.quantity || 0) - (item.committed_quantity || 0);
-    return available <= (item.min_stock || 0);
-  };
-  const lowStockCount = items.filter(isBelowMin).length;
-
-  const filteredItems = items.filter(item => {
-    const query = searchQuery.toLowerCase();
-    const catName = item.categories?.name || '';
-    const matchesSearch = (
-      item.name.toLowerCase().includes(query) ||
-      item.code.toLowerCase().includes(query) ||
-      catName.toLowerCase().includes(query)
-    );
-    return matchesSearch && (!lowStockOnly || isBelowMin(item));
-  });
-
-  const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedItems = filteredItems.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   return (
     <div className="space-y-8">
@@ -269,10 +275,14 @@ export default function AlmacenPage() {
         <div className="flex flex-wrap gap-3 w-full sm:w-auto">
           <button
             onClick={handleExportExcel}
-            className="flex items-center justify-center gap-2 flex-1 sm:flex-none bg-green-700 hover:bg-green-800 text-white px-5 py-3 text-sm font-semibold transition-colors shadow-sm"
+            disabled={isExporting}
+            className="flex items-center justify-center gap-2 flex-1 sm:flex-none bg-green-700 hover:bg-green-800 text-white px-5 py-3 text-sm font-semibold transition-colors shadow-sm disabled:opacity-60"
           >
-            <FileSpreadsheet size={16} />
-            Exportar Excel
+            {isExporting
+              ? <Loader2 size={16} className="animate-spin" />
+              : <FileSpreadsheet size={16} />
+            }
+            {isExporting ? 'Exportando…' : 'Exportar Excel'}
           </button>
           <Link
             href="/productos/conteo"
@@ -300,10 +310,7 @@ export default function AlmacenPage() {
             type="text"
             placeholder="Buscar por código, nombre o categoría..."
             value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full py-2 bg-transparent text-sm focus:outline-none placeholder-gray-400 text-primary"
           />
         </div>
@@ -333,7 +340,7 @@ export default function AlmacenPage() {
         {/* Table Header Bar */}
         <div className="flex items-center justify-between px-6 py-3 bg-primary border-b-2 border-white/20">
           <h2 className="text-xs font-bold text-white uppercase tracking-widest">
-            Catálogo de Inventario — {items.length.toLocaleString()} artículos totales
+            Catálogo de Inventario — {totalCount.toLocaleString()} artículos
           </h2>
         </div>
 
@@ -360,8 +367,8 @@ export default function AlmacenPage() {
             <tbody className="divide-y divide-gray-50">
               {isLoading ? (
                 <TableSkeleton rows={12} cols={13} />
-              ) : paginatedItems.length > 0 ? (
-                paginatedItems.map((item) => {
+              ) : items.length > 0 ? (
+                items.map((item) => {
                   const stock = item.quantity || 0;
                   const committed = item.committed_quantity || 0;
                   const available = stock - committed;
@@ -470,7 +477,7 @@ export default function AlmacenPage() {
         <Pagination
           page={currentPage - 1}
           totalPages={totalPages}
-          totalCount={filteredItems.length}
+          totalCount={totalCount}
           pageSize={ITEMS_PER_PAGE}
           itemLabel="productos"
           onPageChange={(p) => setCurrentPage(p + 1)}
