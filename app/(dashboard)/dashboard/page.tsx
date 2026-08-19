@@ -4,6 +4,7 @@ import { Package, Wallet, ClipboardList, Activity, ArrowRight, DollarSign, Chevr
 import { CardsSkeleton, TableSkeleton } from '@/components/ui/TableSkeleton';
 import { supabase } from '@/utils/supabase/client';
 import { fetchAllRows } from '@/utils/supabase/fetchAll';
+import { cachedFetch, invalidateCache } from '@/utils/queryCache';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
 import type { InventoryItem, Requisition } from '@/types';
@@ -61,6 +62,12 @@ interface DashboardState {
 
 type ProductPeriod = '1m' | '3m' | '6m' | '12m';
 
+// Ventanas de frescura del cache del dashboard. Cualquier mutación relevante
+// invalida antes de recargar, así que esto solo afecta a navegar de ida y
+// vuelta sin que nada haya cambiado.
+const LIVE_STALE_MS = 30_000;
+const CHARTS_STALE_MS = 120_000;
+
 export default function DashboardPage() {
   const [productPeriod, setProductPeriod] = useState<ProductPeriod>('1m');
   const [selectedMonth, setSelectedMonth] = useState<Date>(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -81,7 +88,13 @@ export default function DashboardPage() {
   });
 
   // Fast queries: metrics, recent activity, stock alerts — called on realtime too
-  const fetchLiveMetrics = useCallback(async (month: Date) => {
+  // Métricas del mes: 8 consultas. Se cachean por mes para que volver al
+  // dashboard no las repita todas. El realtime invalida antes de recargar, así
+  // que un cambio en requisas, inventario o asignaciones sí se ve enseguida.
+  const fetchLiveMetrics = useCallback((month: Date) => cachedFetch(
+    `dashboard:live:${month.getFullYear()}-${month.getMonth()}`,
+    LIVE_STALE_MS,
+    async () => {
     const monthStart = new Date(month.getFullYear(), month.getMonth(), 1).toISOString();
     const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1).toISOString();
     // Fechas solo-día para filtrar por assigned_date (columna date) de asignaciones.
@@ -167,10 +180,15 @@ export default function DashboardPage() {
       stockAlerts: alerts as StockAlertItem[],
       budgetChartData: Object.values(budgetMap),
     };
-  }, []);
+  }), []);
 
   // Heavy queries: chart data via RPC (aggregated server-side) — only on initial load, not on realtime
-  const fetchChartData = useCallback(async (month: Date) => {
+  // Series de 12 meses: 4 RPC que agregan un año entero. Es lo más caro de la
+  // pantalla y lo que menos cambia, así que aguanta una ventana más larga.
+  const fetchChartData = useCallback((month: Date) => cachedFetch(
+    `dashboard:charts:${month.getFullYear()}-${month.getMonth()}`,
+    CHARTS_STALE_MS,
+    async () => {
     const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1).toISOString();
     const twelveMonthsAgo = new Date(month.getFullYear() - 1, month.getMonth(), 1).toISOString();
 
@@ -187,7 +205,7 @@ export default function DashboardPage() {
     ]);
 
     return { timelineRows: timelineRows ?? [], productRows: productRows ?? [], categoryRows: categoryRows ?? [], areaRows: areaRows ?? [], month };
-  }, []);
+  }), []);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -303,6 +321,9 @@ export default function DashboardPage() {
         // estatus) en un solo recalculo de las graficas.
         if (reqRealtimeTimer.current) clearTimeout(reqRealtimeTimer.current);
         reqRealtimeTimer.current = setTimeout(async () => {
+        // Un cambio invalida el cache antes de releer: si no, cachedFetch
+        // devolvería justo el dato que acaba de quedar obsoleto.
+        invalidateCache('dashboard');
         // Requisition changes affect ALL charts (categories, timeline, products, areas)
         const [liveData, chartData] = await Promise.all([
           fetchLiveMetrics(selectedMonth),
@@ -392,10 +413,12 @@ export default function DashboardPage() {
         }, 400);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items' }, async () => {
+        invalidateCache('dashboard:live');
         const liveData = await fetchLiveMetrics(selectedMonth);
         setState(prev => ({ ...prev, ...liveData }));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tool_assignments' }, async () => {
+        invalidateCache('dashboard:live');
         const liveData = await fetchLiveMetrics(selectedMonth);
         setState(prev => ({ ...prev, ...liveData }));
       })

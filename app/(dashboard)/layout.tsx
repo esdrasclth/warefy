@@ -8,24 +8,37 @@ import AppLayout from '@/components/layout/AppLayout';
 import { ToastProvider } from '@/components/ui/Toast';
 import { ConfirmProvider } from '@/components/ui/Confirm';
 import type { UserProfile } from '@/types';
+import { clearCache } from '@/utils/queryCache';
+
+// RBAC: rutas permitidas por rol (whitelist).
+const ROLE_WHITELIST: Record<string, string[]> = {
+  ADMIN: ['/dashboard', '/productos', '/requisar', '/compras', '/empleados', '/presupuestos', '/configuracion', '/registros', '/auditoria', '/proveedores', '/asignaciones'],
+  ALMACEN: ['/dashboard', '/productos', '/requisar', '/compras', '/registros', '/proveedores', '/asignaciones'],
+  USER: ['/requisar'],
+  APROBADOR: ['/requisar'],
+};
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [isChecking, setIsChecking] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
+  // 1. Sesión y perfil: una sola vez por carga, NO en cada navegación.
+  //    Antes este efecto dependía de `pathname`, así que cambiar de pantalla
+  //    volvía a consultar `profiles` (con sus joins) y re-suscribía el listener
+  //    de auth cada vez, antes de que la pantalla pudiera pintar nada.
   useEffect(() => {
-    const checkUser = async () => {
+    let cancelled = false;
+
+    const loadProfile = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        
+
         if (!session) {
           router.replace('/login');
           return;
         }
 
-        // Fetch user profile with role and associated area
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select(`
@@ -58,58 +71,58 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           return;
         }
 
-        setProfile(profileData);
-
-        // RBAC: Whitelist-based Route Protection
-        const role = profileData?.role;
-
-        // Rutas permitidas por rol (whitelist)
-        const ROLE_WHITELIST: Record<string, string[]> = {
-          ADMIN: ['/dashboard', '/productos', '/requisar', '/compras', '/empleados', '/presupuestos', '/configuracion', '/registros', '/auditoria', '/proveedores', '/asignaciones'],
-          ALMACEN: ['/dashboard', '/productos', '/requisar', '/compras', '/registros', '/proveedores', '/asignaciones'],
-          USER: ['/requisar'],
-          APROBADOR: ['/requisar'],
-        };
-
-        const roleAllowedRoutes = role ? ROLE_WHITELIST[role] : undefined;
-        if (!roleAllowedRoutes) {
-          // SECURITY: Bloquear roles inexistentes o faltantes
-          router.replace('/login?error=invalid_role');
-          return;
-        }
-
-        const isPathAllowed = roleAllowedRoutes.some(path => pathname.startsWith(path));
-        if (!isPathAllowed) {
-          // SECURITY: Denegar cualquier ruta no incluida explícitamente en el whitelist
-          const redirectPath = (role === 'USER' || role === 'APROBADOR') ? '/requisar' : '/dashboard';
-          if (role !== 'ADMIN') {
-            router.replace(redirectPath);
-            return;
-          }
-        }
-
-        setIsChecking(false);
-
+        if (!cancelled) setProfile(profileData);
       } catch (error) {
         console.error('Error checking auth session:', error);
         router.replace('/login?error=auth_error');
       }
     };
 
-    checkUser();
+    loadProfile();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
+        // SECURITY: el cache puede tener filas que el siguiente usuario que
+        // inicie sesión en este navegador no tiene permiso de ver.
+        clearCache();
         router.replace('/login');
       }
     });
 
     return () => {
+      cancelled = true;
       subscription.unsubscribe();
     };
-  }, [router, pathname]);
+  }, [router]);
 
-  if (isChecking) {
+  // 2. RBAC en cada navegación, evaluado contra el perfil ya cargado.
+  //    Es la misma verificación de antes, pero sin red: ya no cuesta un
+  //    round-trip por pantalla.
+  const role = profile?.role;
+  const allowedRoutes = role ? ROLE_WHITELIST[role] : undefined;
+  const isPathAllowed = allowedRoutes?.some(p => pathname.startsWith(p)) ?? false;
+
+  // Derivado, no estado: no hay nada que sincronizar con un efecto.
+  // ADMIN puede permanecer en rutas fuera del whitelist, como antes.
+  const canRender = !!profile && !!allowedRoutes && (isPathAllowed || role === 'ADMIN');
+
+  // El efecto solo redirige; no fija estado.
+  useEffect(() => {
+    if (!profile) return;
+
+    if (!allowedRoutes) {
+      // SECURITY: Bloquear roles inexistentes o faltantes
+      router.replace('/login?error=invalid_role');
+      return;
+    }
+
+    // SECURITY: Denegar cualquier ruta no incluida explícitamente en el whitelist
+    if (!isPathAllowed && role !== 'ADMIN') {
+      router.replace((role === 'USER' || role === 'APROBADOR') ? '/requisar' : '/dashboard');
+    }
+  }, [profile, allowedRoutes, isPathAllowed, role, router]);
+
+  if (!canRender) {
     return (
       <div className="h-screen w-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-6">

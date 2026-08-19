@@ -10,6 +10,8 @@ import Link from 'next/link';
 import ProductFormModal, { ProductData } from '@/components/almacen/ProductFormModal';
 import { supabase } from '@/utils/supabase/client';
 import { fetchAllRows } from '@/utils/supabase/fetchAll';
+import { useCachedQuery } from '@/utils/useCachedQuery';
+import { invalidateCache } from '@/utils/queryCache';
 import type { InventoryItem } from '@/types';
 
 const ITEMS_PER_PAGE = 50;
@@ -50,10 +52,6 @@ export default function AlmacenPage() {
   // `items` ahora es SOLO la pagina visible. Los totales los calcula Postgres:
   // traer el catalogo entero para contar y filtrar en JS era lo que chocaba con
   // el limite de 1000 filas de PostgREST.
-  const [items, setItems] = useState<InventoryItem[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [lowStockCount, setLowStockCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -77,48 +75,58 @@ export default function AlmacenPage() {
     return q;
   }, [debouncedSearch, lowStockOnly]);
 
-  const fetchItems = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const from = (currentPage - 1) * ITEMS_PER_PAGE;
-      const to = from + ITEMS_PER_PAGE - 1;
+  // La clave incluye página y filtros: al volver a una vista ya cargada se
+  // pinta al instante lo cacheado en vez del skeleton, y la consulta corre de
+  // fondo para refrescarla.
+  const cacheKey = `productos:page:${currentPage}:${debouncedSearch}:${lowStockOnly ? 1 : 0}`;
 
-      const [pageRes, lowRes] = await Promise.all([
-        buildQuery({ count: 'exact' })
-          .order('created_at', { ascending: false })
-          .order('id', { ascending: true })
-          .range(from, to),
-        // El contador del boton "bajo minimo" es global (no lo afecta la
-        // busqueda), asi que va contra la tabla base, que tiene el indice
-        // parcial sobre is_below_min y evita evaluar los agregados de la vista.
-        supabase
-          .from('inventory_items')
-          .select('id', { count: 'exact', head: true })
-          .eq('is_below_min', true),
-      ]);
+  const { data, error, isLoading, refresh } = useCachedQuery(cacheKey, async () => {
+    const from = (currentPage - 1) * ITEMS_PER_PAGE;
+    const to = from + ITEMS_PER_PAGE - 1;
 
-      if (pageRes.error) throw pageRes.error;
+    const [pageRes, lowRes] = await Promise.all([
+      buildQuery({ count: 'exact' })
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to),
+      // El contador del botón "bajo mínimo" es global (no lo afecta la
+      // búsqueda), así que va contra la tabla base, que tiene el índice
+      // parcial sobre is_below_min y evita evaluar los agregados de la vista.
+      supabase
+        .from('inventory_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_below_min', true),
+    ]);
 
-      setItems(toItems(pageRes.data));
-      setTotalCount(pageRes.count || 0);
-      setLowStockCount(lowRes.count || 0);
-    } catch (error: unknown) {
-      console.error('Error fetching inventory:', error);
-      const message = error instanceof Error ? error.message : 'Error inesperado.';
-      toast.error('Error cargando datos: ' + message);
-    }
-    setIsLoading(false);
-  }, [currentPage, buildQuery, toast]);
+    if (pageRes.error) throw pageRes.error;
+
+    return {
+      items: toItems(pageRes.data),
+      totalCount: pageRes.count || 0,
+      lowStockCount: lowRes.count || 0,
+    };
+  });
 
   useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+    if (error) toast.error('Error cargando datos: ' + error.message);
+  }, [error, toast]);
 
-  // Con paginacion de servidor ya no sirve parchear filas en memoria: un cambio
-  // puede sacar o meter un articulo en la pagina actual, o mover los totales.
-  // Se refresca la pagina visible con debounce para no recargar en cada evento.
-  const fetchItemsRef = useRef(fetchItems);
-  fetchItemsRef.current = fetchItems;
+  const items = data?.items ?? [];
+  const totalCount = data?.totalCount ?? 0;
+  const lowStockCount = data?.lowStockCount ?? 0;
+
+  // Tras mutar hay que tirar TODAS las claves de productos (no solo la página
+  // visible) y las del dashboard, que también leen inventario.
+  const reload = useCallback(() => {
+    invalidateCache('productos', 'dashboard');
+    return refresh();
+  }, [refresh]);
+
+  // Con paginación de servidor no sirve parchear filas en memoria: un cambio
+  // puede sacar o meter un artículo en la página actual, o mover los totales.
+  // Se refresca con debounce para no recargar en cada evento.
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -130,7 +138,7 @@ export default function AlmacenPage() {
         { event: '*', schema: 'public', table: 'inventory_items' },
         () => {
           if (timer) clearTimeout(timer);
-          timer = setTimeout(() => fetchItemsRef.current(), 400);
+          timer = setTimeout(() => reloadRef.current(), 400);
         }
       )
       .subscribe();
@@ -168,7 +176,7 @@ export default function AlmacenPage() {
     if (!ok) return;
     const { error } = await supabase.from('inventory_items').delete().eq('id', idToDelete);
     if (error) toast.error('Error eliminando: ' + error.message);
-    else fetchItems();
+    else reload();
   };
 
   const handleEditClick = (product: InventoryItem) => {
@@ -488,7 +496,7 @@ export default function AlmacenPage() {
         isOpen={isModalOpen}
         productToEdit={productToEdit}
         onClose={() => setIsModalOpen(false)}
-        onSaveSuccess={fetchItems}
+        onSaveSuccess={reload}
       />
     </div>
   );

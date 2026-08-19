@@ -4,6 +4,8 @@ import { Plus, Search, X, Save, Loader2, Wrench, Users, AlertTriangle, Undo2, Ar
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
 import { fetchAllRows } from '@/utils/supabase/fetchAll';
+import { useCachedQuery } from '@/utils/useCachedQuery';
+import { invalidateCache } from '@/utils/queryCache';
 import { useToast } from '@/components/ui/Toast';
 import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import { TableSkeleton, CardsSkeleton } from '@/components/ui/TableSkeleton';
@@ -28,6 +30,8 @@ interface EmployeeOption {
 }
 
 const PAGE_SIZE = 50;
+
+const EMPTY_STATS = { active: 0, holders: 0, damaged: 0, lost: 0 };
 
 // Columnas de la vista enriquecida: expone ta.* mas search_text, y sigue
 // resolviendo los embeds porque deja pasar inventory_item_id y employee_id.
@@ -82,15 +86,10 @@ export default function AsignacionesPage() {
   // `assignments` es solo la pagina visible; los totales y contadores los
   // calcula Postgres. `items` y `employees` pasaron a ser resultados de
   // typeahead en vez de la tabla completa cargada por adelantado.
-  const [assignments, setAssignments] = useState<ToolAssignment[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(0);
-  const [stats, setStats] = useState({ active: 0, holders: 0, damaged: 0, lost: 0 });
-  const [reportAreas, setReportAreas] = useState<string[]>([]);
   const [replaceableCandidates, setReplaceableCandidates] = useState<ToolAssignment[]>([]);
   const [items, setItems] = useState<AssignableItem[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [search, setSearch] = useUrlFilterState('q', '', { debounceMs: 300 });
   const [statusFilterRaw, setStatusFilter] = useUrlFilterState('estado', 'ACTIVA');
@@ -139,66 +138,82 @@ export default function AsignacionesPage() {
 
   useEffect(() => { setPage(0); }, [statusFilter]);
 
-  const fetchAssignments = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      let q = supabase
-        .from('tool_assignments_enriched')
-        .select(SELECT_COLS, { count: 'exact' });
+  // La clave incluye página, estatus y búsqueda: volver a una vista ya cargada
+  // la pinta al instante desde el cache y revalida de fondo.
+  const listKey = `asignaciones:page:${page}:${statusFilter}:${debouncedSearch}`;
 
-      if (statusFilter !== 'TODAS') q = q.eq('status', statusFilter);
-      if (debouncedSearch) q = q.ilike('search_text', `%${escapeLike(debouncedSearch)}%`);
+  const {
+    data: listData,
+    error: listError,
+    isLoading,
+    refresh: refreshList,
+  } = useCachedQuery(listKey, async () => {
+    let q = supabase
+      .from('tool_assignments_enriched')
+      .select(SELECT_COLS, { count: 'exact' });
 
-      const { data, error, count } = await q
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: true })
-        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (statusFilter !== 'TODAS') q = q.eq('status', statusFilter);
+    if (debouncedSearch) q = q.ilike('search_text', `%${escapeLike(debouncedSearch)}%`);
 
-      if (error) throw error;
+    const { data, error, count } = await q
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
 
-      setAssignments((data || []) as unknown as ToolAssignment[]);
-      setTotalCount(count || 0);
-    } catch (err) {
-      console.error(err);
-      toast.error('Error cargando asignaciones.');
-    }
-    setIsLoading(false);
-  }, [page, statusFilter, debouncedSearch, toast]);
+    if (error) throw error;
 
-  useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
+    return {
+      assignments: (data || []) as unknown as ToolAssignment[],
+      totalCount: count || 0,
+    };
+  });
 
-  // Contadores globales y áreas del reporte: no dependen de la pagina ni de los
+  useEffect(() => {
+    if (listError) toast.error('Error cargando asignaciones.');
+  }, [listError, toast]);
+
+  const assignments = listData?.assignments ?? [];
+  const totalCount = listData?.totalCount ?? 0;
+
+  // Contadores globales y áreas del reporte: no dependen de la página ni de los
   // filtros, y se resuelven enteros en Postgres (el de empleados responsables es
-  // un COUNT(DISTINCT), que PostgREST no puede expresar).
-  const fetchAggregates = useCallback(async () => {
-    const [statsRes, areasRes] = await Promise.all([
-      supabase.rpc('get_tool_assignment_stats').single(),
-      supabase.rpc('get_active_assignment_areas'),
-    ]);
+  // un COUNT(DISTINCT), que PostgREST no puede expresar). Clave propia para que
+  // paginar no los vuelva a pedir.
+  const { data: aggData, refresh: refreshAggregates } = useCachedQuery(
+    'asignaciones:agg',
+    async () => {
+      const [statsRes, areasRes] = await Promise.all([
+        supabase.rpc('get_tool_assignment_stats').single(),
+        supabase.rpc('get_active_assignment_areas'),
+      ]);
 
-    if (statsRes.data) {
-      const d = statsRes.data as { active: number; holders: number; damaged: number; lost: number };
-      setStats({
-        active: Number(d.active) || 0,
-        holders: Number(d.holders) || 0,
-        damaged: Number(d.damaged) || 0,
-        lost: Number(d.lost) || 0,
-      });
-    }
-    if (areasRes.data) {
-      setReportAreas(
-        (areasRes.data as { area_name: string }[])
+      const d = statsRes.data as
+        | { active: number; holders: number; damaged: number; lost: number }
+        | null;
+
+      return {
+        stats: {
+          active: Number(d?.active) || 0,
+          holders: Number(d?.holders) || 0,
+          damaged: Number(d?.damaged) || 0,
+          lost: Number(d?.lost) || 0,
+        },
+        reportAreas: ((areasRes.data as { area_name: string }[] | null) || [])
           .map(r => r.area_name)
-          .sort((x, y) => x.localeCompare(y, 'es'))
-      );
+          .sort((x, y) => x.localeCompare(y, 'es')),
+      };
     }
-  }, []);
+  );
 
-  useEffect(() => { fetchAggregates(); }, [fetchAggregates]);
+  const stats = aggData?.stats ?? EMPTY_STATS;
+  const reportAreas = aggData?.reportAreas ?? [];
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([fetchAssignments(), fetchAggregates()]);
-  }, [fetchAssignments, fetchAggregates]);
+    // Tras mutar hay que tirar TODAS las claves de la pantalla (otras páginas y
+    // filtros quedaron obsoletos), y las del dashboard, que cuenta asignaciones.
+    invalidateCache('asignaciones', 'dashboard');
+    await Promise.all([refreshList(), refreshAggregates()]);
+  }, [refreshList, refreshAggregates]);
 
   // Typeahead de productos asignables: antes se cargaba el catalogo entero por
   // adelantado solo para filtrarlo en memoria.

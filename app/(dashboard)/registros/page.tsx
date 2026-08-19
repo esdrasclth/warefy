@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2, Download, Calendar, FileSpreadsheet, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { useUrlFilterState } from '@/utils/useUrlFilterState';
@@ -7,6 +7,7 @@ import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Pagination from '@/components/ui/Pagination';
 import { supabase } from '@/utils/supabase/client';
 import { fetchAllRows, FETCH_ALL_MAX_ROWS } from '@/utils/supabase/fetchAll';
+import { useCachedQuery } from '@/utils/useCachedQuery';
 import type { InventoryItem, Requisition, RequisitionItem } from '@/types';
 
 const PAGE_SIZE = 50;
@@ -177,9 +178,6 @@ interface RegistroQueryItem extends RequisitionItem {
 
 export default function RegistrosPage() {
   const toast = useToast();
-  const [rows, setRows] = useState<RegistroRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useUrlFilterState('q', '', { debounceMs: 300 });
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -203,8 +201,12 @@ export default function RegistrosPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const fetchPage = useCallback(async () => {
-    setIsLoading(true);
+  // La clave incluye todos los parámetros de la consulta: al volver a una
+  // página ya vista se pinta al instante lo cacheado en vez del skeleton, y la
+  // consulta real corre de fondo para refrescarla.
+  const cacheKey = `registros:page:${page}:${debouncedSearch.trim()}`;
+
+  const { data, error, isLoading } = useCachedQuery(cacheKey, async () => {
     const from = page * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
     const searchValue = debouncedSearch.trim();
@@ -246,17 +248,13 @@ export default function RegistrosPage() {
       );
     }
 
-    const { data, error, count } = await query
+    const { data: pageData, error: pageError, count } = await query
       .order('created_at', { ascending: false })
       .range(from, to);
 
-    if (error) {
-      console.error('Error fetching registros:', error);
-      setIsLoading(false);
-      return;
-    }
+    if (pageError) throw pageError;
 
-    const mapped = (data as unknown as RegistroQueryItem[] || [])
+    const mapped = (pageData as unknown as RegistroQueryItem[] || [])
       .map((item): RegistroRow => {
         const req = item.requisitions;
         const inv = item.inventory_items;
@@ -282,14 +280,15 @@ export default function RegistrosPage() {
         };
       });
 
-    setRows(mapped);
-    setTotalCount(count || 0);
-    setIsLoading(false);
-  }, [page, debouncedSearch]);
+    return { rows: mapped, totalCount: count || 0 };
+  });
 
   useEffect(() => {
-    fetchPage();
-  }, [fetchPage]);
+    if (error) toast.error('Error cargando registros: ' + error.message);
+  }, [error, toast]);
+
+  const rows = data?.rows ?? [];
+  const totalCount = data?.totalCount ?? 0;
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 

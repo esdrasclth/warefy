@@ -1,8 +1,10 @@
 'use client';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ShoppingCart, Plus, Search, Trash2, Eye, Loader2, Check, X, FileSpreadsheet, Edit, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
 import { fetchAllRows } from '@/utils/supabase/fetchAll';
+import { useCachedQuery } from '@/utils/useCachedQuery';
+import { invalidateCache } from '@/utils/queryCache';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import type { Purchase } from '@/types';
@@ -13,23 +15,23 @@ import { TableSkeleton } from '@/components/ui/TableSkeleton';
 
 type PurchaseStatus = 'PENDIENTE' | 'RECIBIDA' | 'CANCELADA';
 
+// Identidad estable para el fallback: evita recalcular memos en cada render.
+const EMPTY_PURCHASES: Purchase[] = [];
+
 export default function ComprasPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const [searchQuery, setSearchQuery] = useUrlFilterState('q', '', { debounceMs: 300 });
   const [statusFilterRaw, setStatusFilter] = useUrlFilterState('estado', 'TODAS');
   const statusFilter = statusFilterRaw as 'TODAS' | PurchaseStatus;
-  const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
   const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchPurchases = async (silent = false) => {
-    if (!silent) setIsLoading(true);
+  const { data, error, isLoading, refresh } = useCachedQuery('compras:list', async () => {
     // Se pagina con fetchAllRows: PostgREST corta en 1000 filas y el listado
     // quedaba incompleto. El orden termina en `id` para que los lotes no se
     // solapen ni salten filas.
-    const { rows, error } = await fetchAllRows((from, to) =>
+    const { rows, error: fetchError } = await fetchAllRows((from, to) =>
       supabase
         .from('purchases')
         .select(`
@@ -43,17 +45,27 @@ export default function ComprasPage() {
         .range(from, to)
     );
 
-    if (error) {
-      console.error('Error fetching purchases:', error);
-    } else {
-      setPurchases(rows);
-    }
-    if (!silent) setIsLoading(false);
-  };
+    if (fetchError) throw fetchError;
+    return rows as unknown as Purchase[];
+  });
 
   useEffect(() => {
-    fetchPurchases();
+    if (error) console.error('Error fetching purchases:', error);
+  }, [error]);
 
+  const purchases = data ?? EMPTY_PURCHASES;
+
+  // Recibir o cancelar una compra mueve inventario, así que también hay que
+  // tirar las claves de productos y del dashboard.
+  const reload = useCallback(() => {
+    invalidateCache('compras', 'productos', 'dashboard');
+    return refresh();
+  }, [refresh]);
+
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
+
+  useEffect(() => {
     const channel = supabase
       .channel('compras-realtime')
       .on(
@@ -63,7 +75,7 @@ export default function ComprasPage() {
           // Refresco silencioso + debounce: evita el parpadeo del skeleton
           // cuando otros usuarios cambian compras.
           if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
-          realtimeTimer.current = setTimeout(() => fetchPurchases(true), 400);
+          realtimeTimer.current = setTimeout(() => reloadRef.current(), 400);
         }
       )
       .subscribe();
@@ -84,7 +96,7 @@ export default function ComprasPage() {
     if (ok) {
       const { error } = await supabase.from('purchases').delete().eq('id', id);
       if (error) toast.error('Error: ' + error.message);
-      else fetchPurchases();
+      else reload();
     }
   };
 
@@ -105,7 +117,7 @@ export default function ComprasPage() {
       if (error) throw error;
 
       toast.success('Compra recibida e inventario actualizado con éxito.');
-      fetchPurchases();
+      reload();
     } catch (error: any) {
       toast.error('Error al recibir compra: ' + error.message);
     }
@@ -114,7 +126,7 @@ export default function ComprasPage() {
   const updateStatus = async (id: string, newStatus: PurchaseStatus) => {
     const { error } = await supabase.from('purchases').update({ status: newStatus }).eq('id', id);
     if (error) toast.error('Error: ' + error.message);
-    else fetchPurchases();
+    else reload();
   };
 
   const [isExporting, setIsExporting] = useState(false);
