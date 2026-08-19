@@ -9,6 +9,7 @@ import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Link from 'next/link';
 import ProductFormModal, { ProductData } from '@/components/almacen/ProductFormModal';
 import { supabase } from '@/utils/supabase/client';
+import { fetchAllRows } from '@/utils/supabase/fetchAll';
 import type { InventoryItem } from '@/types';
 
 const ITEMS_PER_PAGE = 50;
@@ -30,18 +31,29 @@ export default function AlmacenPage() {
     setIsLoading(true);
     try {
       // 1. Fetch Inventory Items
-      const { data: invData, error: invError } = await supabase
-        .from('inventory_items')
-        .select('*, categories(name), units!unit_id(name), preferred_supplier_id, package_unit:units!package_unit_id(name), units_per_package')
-        .order('created_at', { ascending: false });
+      // Se pagina con fetchAllRows: sin ella PostgREST devolvia solo las primeras
+      // 1000 filas y el inventario quedaba incompleto en pantalla y en el Excel.
+      // El orden termina en `id` para que los lotes no se solapen ni salten filas.
+      const { rows: invData, error: invError } = await fetchAllRows((from, to) =>
+        supabase
+          .from('inventory_items')
+          .select('*, categories(name), units!unit_id(name), preferred_supplier_id, package_unit:units!package_unit_id(name), units_per_package')
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, to)
+      );
 
       if (invError) throw invError;
 
       // 2. Fetch PENDING Purchase Items (to calculate OC)
-      const { data: ocData, error: ocError } = await supabase
-        .from('purchase_items')
-        .select('inventory_item_id, quantity, purchases!inner(status)')
-        .eq('purchases.status', 'PENDIENTE');
+      const { rows: ocData, error: ocError } = await fetchAllRows((from, to) =>
+        supabase
+          .from('purchase_items')
+          .select('inventory_item_id, quantity, purchases!inner(status)')
+          .eq('purchases.status', 'PENDIENTE')
+          .order('id', { ascending: true })
+          .range(from, to)
+      );
 
       if (ocError) throw ocError;
 
@@ -49,23 +61,27 @@ export default function AlmacenPage() {
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-      const { data: reqData, error: reqError } = await supabase
-        .from('requisition_items')
-        .select('inventory_item_id, quantity, delivered_quantity, requisitions!inner(status, created_at)')
-        .eq('requisitions.status', 'ENTREGADA')
-        .gte('requisitions.created_at', sixMonthsAgo.toISOString());
+      const { rows: reqData, error: reqError } = await fetchAllRows((from, to) =>
+        supabase
+          .from('requisition_items')
+          .select('inventory_item_id, quantity, delivered_quantity, requisitions!inner(status, created_at)')
+          .eq('requisitions.status', 'ENTREGADA')
+          .gte('requisitions.created_at', sixMonthsAgo.toISOString())
+          .order('id', { ascending: true })
+          .range(from, to)
+      );
 
       if (reqError) throw reqError;
 
       // Aggregate data
       const ocMap: Record<string, number> = {};
-      ocData?.forEach(item => {
+      ocData.forEach(item => {
         ocMap[item.inventory_item_id] = (ocMap[item.inventory_item_id] || 0) + item.quantity;
       });
 
       const consumptionMap: Record<string, number> = {};
       const consumptionMonthsMap: Record<string, Set<string>> = {};
-      reqData?.forEach(item => {
+      reqData.forEach(item => {
         const qty = (item.delivered_quantity ?? item.quantity) || 0;
         const req = item.requisitions as unknown as { created_at: string };
         const monthKey = req.created_at.substring(0, 7);
@@ -74,7 +90,7 @@ export default function AlmacenPage() {
         consumptionMonthsMap[item.inventory_item_id].add(monthKey);
       });
 
-      const enrichedItems = invData?.map(item => ({
+      const enrichedItems = invData.map(item => ({
         ...item,
         pending_oc: ocMap[item.id] || 0,
         avg_consumption: consumptionMonthsMap[item.id]
@@ -82,7 +98,7 @@ export default function AlmacenPage() {
           : 0
       }));
 
-      setItems(enrichedItems || []);
+      setItems(enrichedItems);
     } catch (error: unknown) {
       console.error('Error fetching inventory:', error);
       const message = error instanceof Error ? error.message : 'Error inesperado.';

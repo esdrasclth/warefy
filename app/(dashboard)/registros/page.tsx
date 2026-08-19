@@ -6,12 +6,10 @@ import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import Pagination from '@/components/ui/Pagination';
 import { supabase } from '@/utils/supabase/client';
+import { fetchAllRows, FETCH_ALL_MAX_ROWS } from '@/utils/supabase/fetchAll';
 import type { InventoryItem, Requisition, RequisitionItem } from '@/types';
 
 const PAGE_SIZE = 50;
-// PostgREST corta cada respuesta en 1000 filas; ese es el tamaño de lote de la exportación.
-const EXPORT_BATCH_SIZE = 1000;
-const EXPORT_MAX_ROWS = 100000;
 
 interface RegistroRow {
   fecha: string;
@@ -164,14 +162,11 @@ export default function RegistrosPage() {
       const fromISO = new Date(`${dateFrom}T00:00:00`).toISOString();
       const toISO = new Date(`${dateTo}T23:59:59.999`).toISOString();
 
-      // PostgREST devuelve como máximo 1000 filas por respuesta (max-rows), así que
-      // el rango completo se trae en lotes hasta agotar los resultados.
-      const all: RegistroQueryItem[] = [];
-      let offset = 0;
-      let truncated = false;
-
-      for (;;) {
-        const { data, error } = await supabase
+      // fetchAllRows pagina en lotes de 1000: PostgREST corta cada respuesta en
+      // ese numero (max-rows), asi que una sola consulta descartaba en silencio
+      // el resto del rango seleccionado.
+      const { rows, error, truncated } = await fetchAllRows((from, to) =>
+        supabase
           .from('requisition_items')
           .select(`
             id,
@@ -196,20 +191,15 @@ export default function RegistrosPage() {
           .neq('requisitions.status', 'CANCELADA')
           .gte('requisitions.created_at', fromISO)
           .lte('requisitions.created_at', toISO)
-          // Se pagina por id (único y estable) para que los lotes no se solapen
-          // ni salten filas; el orden por fecha se aplica en memoria más abajo.
+          // Se pagina por id (unico y estable) para que los lotes no se solapen
+          // ni salten filas; el orden por fecha se aplica en memoria mas abajo.
           .order('id', { ascending: true })
-          .range(offset, offset + EXPORT_BATCH_SIZE - 1);
+          .range(from, to)
+      );
 
-        if (error) { toast.error('Error al exportar: ' + error.message); return; }
-        if (!data || data.length === 0) break;
+      if (error) { toast.error('Error al exportar: ' + error.message); return; }
 
-        all.push(...(data as unknown as RegistroQueryItem[]));
-
-        if (data.length < EXPORT_BATCH_SIZE) break;
-        if (all.length >= EXPORT_MAX_ROWS) { truncated = true; break; }
-        offset += EXPORT_BATCH_SIZE;
-      }
+      const all = rows as unknown as RegistroQueryItem[];
 
       if (all.length === 0) {
         toast.warning('No hay registros en el rango seleccionado.');
@@ -258,7 +248,7 @@ export default function RegistrosPage() {
 
       if (truncated) {
         toast.warning(
-          `El rango excede el máximo de ${EXPORT_MAX_ROWS.toLocaleString()} filas. ` +
+          `El rango excede el máximo de ${FETCH_ALL_MAX_ROWS.toLocaleString()} filas. ` +
           `Se exportaron las primeras ${exportRows.length.toLocaleString()}; usa un rango más corto.`
         );
       } else {

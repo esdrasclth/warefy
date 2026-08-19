@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ShoppingCart, Plus, Search, Trash2, Eye, Loader2, Check, X, FileSpreadsheet, Edit, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/utils/supabase/client';
+import { fetchAllRows } from '@/utils/supabase/fetchAll';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import type { Purchase } from '@/types';
@@ -25,20 +26,27 @@ export default function ComprasPage() {
 
   const fetchPurchases = async (silent = false) => {
     if (!silent) setIsLoading(true);
-    const { data, error } = await supabase
-      .from('purchases')
-      .select(`
-        *,
-        suppliers ( name ),
-        requisitions ( consecutive ),
-        purchase_items ( quantity, unit_cost, received_quantity, inventory_items ( name, code ) )
-      `)
-      .order('created_at', { ascending: false });
+    // Se pagina con fetchAllRows: PostgREST corta en 1000 filas y el listado
+    // quedaba incompleto. El orden termina en `id` para que los lotes no se
+    // solapen ni salten filas.
+    const { rows, error } = await fetchAllRows((from, to) =>
+      supabase
+        .from('purchases')
+        .select(`
+          *,
+          suppliers ( name ),
+          requisitions ( consecutive ),
+          purchase_items ( quantity, unit_cost, received_quantity, inventory_items ( name, code ) )
+        `)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to)
+    );
 
     if (error) {
       console.error('Error fetching purchases:', error);
-    } else if (data) {
-      setPurchases(data);
+    } else {
+      setPurchases(rows);
     }
     if (!silent) setIsLoading(false);
   };
@@ -121,17 +129,21 @@ export default function ComprasPage() {
     setIsExporting(true);
     try {
       // Fresh fetch with full detail — ensures inventory_items and received_quantity are always present
-      const { data, error } = await supabase
-        .from('purchases')
-        .select(`
-          id, consecutive, status, total_cost, comments, created_at, manual_requisition_number,
-          suppliers ( name ),
-          requisitions ( consecutive ),
-          purchase_items ( quantity, unit_cost, received_quantity, inventory_items ( name, code ) )
-        `)
-        .order('created_at', { ascending: false });
+      const { rows: data, error, truncated } = await fetchAllRows((from, to) =>
+        supabase
+          .from('purchases')
+          .select(`
+            id, consecutive, status, total_cost, comments, created_at, manual_requisition_number,
+            suppliers ( name ),
+            requisitions ( consecutive ),
+            purchase_items ( quantity, unit_cost, received_quantity, inventory_items ( name, code ) )
+          `)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, to)
+      );
 
-      if (error || !data) throw error ?? new Error('Sin datos');
+      if (error) throw error;
 
       // Apply current filters
       const q = searchQuery.toLowerCase();
@@ -186,10 +198,21 @@ export default function ComprasPage() {
         });
       });
 
+      if (!dataFiltered.length) {
+        toast.warning('No hay compras que coincidan con los filtros actuales.');
+        return;
+      }
+
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), 'Resumen');
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), 'Detalle');
       XLSX.writeFile(wb, `Reporte_Compras_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      if (truncated) {
+        toast.warning('Se alcanzo el maximo de filas exportables; el reporte esta incompleto.');
+      } else {
+        toast.success(`${dataFiltered.length.toLocaleString()} compras exportadas.`);
+      }
     } catch (err: any) {
       toast.error('Error al exportar: ' + err.message);
     } finally {

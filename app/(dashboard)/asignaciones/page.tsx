@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Search, X, Save, Loader2, Wrench, Users, AlertTriangle, Undo2, ArrowRightLeft, ChevronDown, ShieldAlert, History, CheckCircle2, Printer, FileText, FileSpreadsheet } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/utils/supabase/client';
+import { fetchAllRows } from '@/utils/supabase/fetchAll';
 import { useToast } from '@/components/ui/Toast';
 import { useUrlFilterState } from '@/utils/useUrlFilterState';
 import { TableSkeleton, CardsSkeleton } from '@/components/ui/TableSkeleton';
@@ -106,31 +107,49 @@ export default function AsignacionesPage() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
+      // Se pagina con fetchAllRows: PostgREST corta en 1000 filas, lo que dejaba
+      // el listado y las 4 hojas del Excel incompletos, y truncaba los selectores
+      // de producto y empleado. El orden termina en `id` para que los lotes no se
+      // solapen ni salten filas.
       const [assignRes, itemsRes, empsRes] = await Promise.all([
-        supabase
-          .from('tool_assignments')
-          .select(`
-            *,
-            inventory_items ( id, code, name, quantity, units!unit_id ( name ) ),
-            employees ( id, code, first_name, last_name, position, areas ( name ) )
-          `)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('inventory_items')
-          .select('id, code, name, quantity')
-          .eq('is_assignable', true)
-          .eq('status', 'ACTIVE')
-          .order('name'),
-        supabase
-          .from('employees')
-          .select('id, code, first_name, last_name, position, areas ( name )')
-          .order('first_name'),
+        fetchAllRows((from, to) =>
+          supabase
+            .from('tool_assignments')
+            .select(`
+              *,
+              inventory_items ( id, code, name, quantity, units!unit_id ( name ) ),
+              employees ( id, code, first_name, last_name, position, areas ( name ) )
+            `)
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: true })
+            .range(from, to)
+        ),
+        fetchAllRows((from, to) =>
+          supabase
+            .from('inventory_items')
+            .select('id, code, name, quantity')
+            .eq('is_assignable', true)
+            .eq('status', 'ACTIVE')
+            .order('name')
+            .order('id', { ascending: true })
+            .range(from, to)
+        ),
+        fetchAllRows((from, to) =>
+          supabase
+            .from('employees')
+            .select('id, code, first_name, last_name, position, areas ( name )')
+            .order('first_name')
+            .order('id', { ascending: true })
+            .range(from, to)
+        ),
       ]);
 
       if (assignRes.error) throw assignRes.error;
-      setAssignments((assignRes.data || []) as unknown as ToolAssignment[]);
-      setItems((itemsRes.data || []) as AssignableItem[]);
-      setEmployees((empsRes.data || []) as unknown as EmployeeOption[]);
+      if (itemsRes.error) throw itemsRes.error;
+      if (empsRes.error) throw empsRes.error;
+      setAssignments(assignRes.rows as unknown as ToolAssignment[]);
+      setItems(itemsRes.rows as unknown as AssignableItem[]);
+      setEmployees(empsRes.rows as unknown as EmployeeOption[]);
     } catch (err) {
       console.error(err);
       toast.error('Error cargando asignaciones.');
