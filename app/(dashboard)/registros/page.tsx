@@ -9,6 +9,9 @@ import { supabase } from '@/utils/supabase/client';
 import type { InventoryItem, Requisition, RequisitionItem } from '@/types';
 
 const PAGE_SIZE = 50;
+// PostgREST corta cada respuesta en 1000 filas; ese es el tamaño de lote de la exportación.
+const EXPORT_BATCH_SIZE = 1000;
+const EXPORT_MAX_ROWS = 100000;
 
 interface RegistroRow {
   fecha: string;
@@ -60,40 +63,6 @@ export default function RegistrosPage() {
     }, 350);
     return () => clearTimeout(t);
   }, [search]);
-
-  const buildQuery = useCallback((forExport = false, exportFrom?: string, exportTo?: string) => {
-    let q = supabase
-      .from('requisition_items')
-      .select(`
-        id,
-        quantity,
-        delivered_quantity,
-        unit_cost,
-        inventory_items (
-          code,
-          name,
-          categories ( name )
-        ),
-        requisitions (
-          id,
-          created_at,
-          requester_code,
-          requester_name,
-          area_name,
-          status
-        )
-      `, forExport ? undefined : { count: 'exact' })
-      .neq('requisitions.status', 'CANCELADA')
-      .order('requisitions(created_at)', { ascending: false });
-
-    if (forExport && exportFrom && exportTo) {
-      q = q
-        .gte('requisitions(created_at)', `${exportFrom}T00:00:00`)
-        .lte('requisitions(created_at)', `${exportTo}T23:59:59`);
-    }
-
-    return q;
-  }, []);
 
   const fetchPage = useCallback(async () => {
     setIsLoading(true);
@@ -187,40 +156,75 @@ export default function RegistrosPage() {
 
   const handleExportExcel = async () => {
     if (!dateFrom || !dateTo) { toast.warning('Selecciona un rango de fechas válido.'); return; }
+    if (dateFrom > dateTo) { toast.warning('La fecha inicial no puede ser mayor que la final.'); return; }
     setIsExporting(true);
     try {
-      const { data, error } = await supabase
-        .from('requisition_items')
-        .select(`
-          quantity,
-          delivered_quantity,
-          unit_cost,
-          inventory_items (
-            code,
-            name,
-            categories ( name )
-          ),
-          requisitions!inner (
-            consecutive,
-            comments,
-            created_at,
-            requester_code,
-            requester_name,
-            area_name,
-            status
-          )
-        `)
-        .neq('requisitions.status', 'CANCELADA')
-        .gte('requisitions.created_at', `${dateFrom}T00:00:00Z`)
-        .lte('requisitions.created_at', `${dateTo}T23:59:59Z`)
-        .order('requisitions(created_at)', { ascending: false });
+      // Los límites se construyen en la zona horaria local del navegador para que
+      // el rango exportado coincida con las fechas que el usuario ve en pantalla.
+      const fromISO = new Date(`${dateFrom}T00:00:00`).toISOString();
+      const toISO = new Date(`${dateTo}T23:59:59.999`).toISOString();
 
-      if (error) { toast.error('Error al exportar: ' + error.message); return; }
+      // PostgREST devuelve como máximo 1000 filas por respuesta (max-rows), así que
+      // el rango completo se trae en lotes hasta agotar los resultados.
+      const all: RegistroQueryItem[] = [];
+      let offset = 0;
+      let truncated = false;
 
-      const exportRows = (data || []).map((item: any) => {
-        const req = item.requisitions as any;
-        const inv = item.inventory_items as any;
-        const cat = inv?.categories as any;
+      for (;;) {
+        const { data, error } = await supabase
+          .from('requisition_items')
+          .select(`
+            id,
+            quantity,
+            delivered_quantity,
+            unit_cost,
+            inventory_items (
+              code,
+              name,
+              categories ( name )
+            ),
+            requisitions!inner (
+              consecutive,
+              comments,
+              created_at,
+              requester_code,
+              requester_name,
+              area_name,
+              status
+            )
+          `)
+          .neq('requisitions.status', 'CANCELADA')
+          .gte('requisitions.created_at', fromISO)
+          .lte('requisitions.created_at', toISO)
+          // Se pagina por id (único y estable) para que los lotes no se solapen
+          // ni salten filas; el orden por fecha se aplica en memoria más abajo.
+          .order('id', { ascending: true })
+          .range(offset, offset + EXPORT_BATCH_SIZE - 1);
+
+        if (error) { toast.error('Error al exportar: ' + error.message); return; }
+        if (!data || data.length === 0) break;
+
+        all.push(...(data as unknown as RegistroQueryItem[]));
+
+        if (data.length < EXPORT_BATCH_SIZE) break;
+        if (all.length >= EXPORT_MAX_ROWS) { truncated = true; break; }
+        offset += EXPORT_BATCH_SIZE;
+      }
+
+      if (all.length === 0) {
+        toast.warning('No hay registros en el rango seleccionado.');
+        return;
+      }
+
+      all.sort((a, b) =>
+        new Date(b.requisitions?.created_at || 0).getTime() -
+        new Date(a.requisitions?.created_at || 0).getTime()
+      );
+
+      const exportRows = all.map((item) => {
+        const req = item.requisitions;
+        const inv = item.inventory_items;
+        const cat = inv?.categories;
         const precioUnit = Number(item.unit_cost) || 0;
         const cantEntregada = Number(item.delivered_quantity ?? item.quantity) || 0;
         return {
@@ -251,6 +255,15 @@ export default function RegistrosPage() {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Registros');
       XLSX.writeFile(wb, `registros_${dateFrom}_${dateTo}.xlsx`);
+
+      if (truncated) {
+        toast.warning(
+          `El rango excede el máximo de ${EXPORT_MAX_ROWS.toLocaleString()} filas. ` +
+          `Se exportaron las primeras ${exportRows.length.toLocaleString()}; usa un rango más corto.`
+        );
+      } else {
+        toast.success(`${exportRows.length.toLocaleString()} registros exportados.`);
+      }
     } catch (e: any) {
       toast.error('Error inesperado: ' + e.message);
     } finally {
